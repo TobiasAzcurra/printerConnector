@@ -1,0 +1,28 @@
+{
+  "id": "price-tag",
+  "name": "Etiqueta de Precio",
+  "description": "Para imprimir precios en góndola",
+  "width": 40,
+  "orientation": "landscape",
+  "requiredFields": [
+    "productName",
+    "price"
+  ],
+  "optionalFields": [
+    "barcode",
+    "offerPrice",
+    "validUntil",
+    "category"
+  ],
+  "sections": {
+    "header": {
+      "content": "{{businessName}}"
+    },
+    "main": {
+      "content": "{{productName}}\n${{price}}"
+    },
+    "footer": {
+      "content": "{{barcode}}"
+    }
+  }
+}

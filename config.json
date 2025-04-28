@@ -1,0 +1,11 @@
+{
+  "clienteId": "burger123",
+  "printerIP": "192.168.100.50",
+  "printerPort": 9100,
+  "ticketWidth": 48,
+  "useLogo": true,
+  "useHeaderLogo": true,
+  "useFooterLogo": true,
+  "businessName": "ANhelo",
+  "useFontTicket": true
+}
