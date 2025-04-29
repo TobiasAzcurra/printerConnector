@@ -355,8 +355,18 @@ function checkPendingPrintJobs() {
       const jobContent = fs.readFileSync(tempPrintJobPath, "utf8");
       const datos = JSON.parse(jobContent);
 
-      // Procesamos usando el manejador
-      handleImpresion(datos);
+      // Verificar si es un trabajo por lotes
+      if (datos.isBatchPrint && Array.isArray(datos.jobs)) {
+        console.log(
+          `📦 Procesando lote de ${datos.jobs.length} trabajos de impresión`
+        );
+
+        // Procesar cada trabajo en secuencia
+        processBatchJobs(datos.jobs);
+      } else {
+        // Procesamos usando el manejador para un solo trabajo
+        handleImpresion(datos);
+      }
 
       // Eliminamos el archivo temporal
       fs.unlinkSync(tempPrintJobPath);
@@ -373,30 +383,24 @@ function checkPendingPrintJobs() {
   }
 }
 
-// 🔍 Verificar si hay trabajos pendientes de impresión
-function checkPendingPrintJobs() {
-  if (fs.existsSync(tempPrintJobPath)) {
+// Función para procesar trabajos por lotes de forma secuencial
+async function processBatchJobs(jobs) {
+  for (let i = 0; i < jobs.length; i++) {
+    const job = jobs[i];
+    console.log(`🖨️ Procesando trabajo ${i + 1} de ${jobs.length}`);
+
     try {
-      console.log("🔍 Encontrado trabajo de impresión pendiente...");
-      const jobContent = fs.readFileSync(tempPrintJobPath, "utf8");
-      const pedido = JSON.parse(jobContent);
-
-      // Procesamos el pedido
-      handleImpresion(pedido);
-
-      // Eliminamos el archivo temporal
-      fs.unlinkSync(tempPrintJobPath);
-      console.log("✅ Trabajo de impresión pendiente procesado");
+      await handleImpresion(job);
+      // Pequeña pausa entre impresiones para evitar sobrecarga
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (err) {
-      console.error("❌ Error al procesar trabajo pendiente:", err);
-      // Si hay error, intentamos eliminar el archivo de todas formas
-      try {
-        fs.unlinkSync(tempPrintJobPath);
-      } catch (e) {
-        console.error("No se pudo eliminar el archivo temporal:", e);
-      }
+      console.error(
+        `❌ Error al procesar trabajo ${i + 1} de ${jobs.length}:`,
+        err
+      );
     }
   }
+  console.log(`✅ Lote de ${jobs.length} trabajos completado`);
 }
 
 // 👀 Watcher de cambios en config.json

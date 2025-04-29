@@ -247,7 +247,7 @@ app.delete("/api/logo-footer", (req, res) => {
   }
 });
 
-// Endpoint para imprimir plantillas
+// Endpoint para imprimir plantillas (modificado para soportar impresión por lotes)
 app.post("/api/imprimir", (req, res) => {
   const data = req.body;
   const templateId = data.templateId || "receipt"; // Por defecto se usa la plantilla de ticket
@@ -255,41 +255,122 @@ app.post("/api/imprimir", (req, res) => {
   console.log(`📦 Recibido trabajo de impresión con plantilla: ${templateId}`);
 
   try {
-    // Validar los datos contra la plantilla
-    const templates = require("../src/templates");
-    const validacion = templates.validarDatosParaPlantilla(templateId, data);
+    // Comprobar si es una impresión por lotes
+    const isBatchPrint =
+      Array.isArray(data.products) && data.products.length > 0;
 
-    if (!validacion.valid) {
-      return res.status(400).json({
-        error: "Datos inválidos para la plantilla",
-        details: `Campos faltantes: ${validacion.missingFields.join(", ")}`,
+    if (isBatchPrint) {
+      console.log(
+        `🔄 Procesando impresión por lotes de ${data.products.length} productos`
+      );
+
+      // Validar cada producto en el lote
+      const templates = require("../src/templates");
+      const invalidProducts = [];
+
+      // Creamos un array para guardar los trabajos de impresión
+      const printJobs = data.products.map((product, index) => {
+        // Crear objeto de datos para cada producto
+        const productData = {
+          templateId: templateId,
+          productName: product.productName,
+          price: product.price,
+          _templateInfo: {
+            id: templateId,
+            timestamp: new Date().toISOString(),
+            batchId: `batch-${Date.now()}`, // ID único para este lote
+            index: index, // Índice en el lote
+            total: data.products.length, // Total de productos en el lote
+          },
+        };
+
+        // Validar los datos contra la plantilla
+        const validacion = templates.validarDatosParaPlantilla(
+          templateId,
+          productData
+        );
+        if (!validacion.valid) {
+          invalidProducts.push({
+            index,
+            productName: product.productName,
+            errors: validacion.missingFields,
+          });
+        }
+
+        return productData;
+      });
+
+      // Si hay productos inválidos, retornar error
+      if (invalidProducts.length > 0) {
+        return res.status(400).json({
+          error: "Datos inválidos para algunos productos",
+          details: invalidProducts,
+        });
+      }
+
+      // Guardar los trabajos de impresión por lotes
+      fs.writeFileSync(
+        tempPrintJobPath,
+        JSON.stringify(
+          {
+            isBatchPrint: true,
+            jobs: printJobs,
+          },
+          null,
+          2
+        )
+      );
+
+      // Tocar el archivo config.json para desencadenar el watcher en index.js
+      const configContent = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+
+      console.log(
+        `✅ Trabajo de impresión por lotes (${templateId}) enviado al conector`
+      );
+      res.json({
+        success: true,
+        message: `Trabajo de impresión por lotes con ${printJobs.length} productos enviado`,
+      });
+    } else {
+      // Código existente para impresión individual
+      const templates = require("../src/templates");
+      const validacion = templates.validarDatosParaPlantilla(templateId, data);
+
+      if (!validacion.valid) {
+        return res.status(400).json({
+          error: "Datos inválidos para la plantilla",
+          details: `Campos faltantes: ${validacion.missingFields.join(", ")}`,
+        });
+      }
+
+      // Guardar temporalmente el pedido y notificar al index.js
+      // Añadimos el templateId al objeto para que el conector sepa qué plantilla usar
+      const datosParaImprimir = {
+        ...data,
+        _templateInfo: {
+          id: templateId,
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      fs.writeFileSync(
+        tempPrintJobPath,
+        JSON.stringify(datosParaImprimir, null, 2)
+      );
+
+      // Tocar el archivo config.json para desencadenar el watcher en index.js
+      const configContent = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+
+      console.log(
+        `✅ Trabajo de impresión (${templateId}) enviado al conector`
+      );
+      res.json({
+        success: true,
+        message: `Trabajo de impresión con plantilla ${templateId} enviado`,
       });
     }
-
-    // Guardar temporalmente el pedido y notificar al index.js
-    // Añadimos el templateId al objeto para que el conector sepa qué plantilla usar
-    const datosParaImprimir = {
-      ...data,
-      _templateInfo: {
-        id: templateId,
-        timestamp: new Date().toISOString(),
-      },
-    };
-
-    fs.writeFileSync(
-      tempPrintJobPath,
-      JSON.stringify(datosParaImprimir, null, 2)
-    );
-
-    // Tocar el archivo config.json para desencadenar el watcher en index.js
-    const configContent = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
-
-    console.log(`✅ Trabajo de impresión (${templateId}) enviado al conector`);
-    res.json({
-      success: true,
-      message: `Trabajo de impresión con plantilla ${templateId} enviado`,
-    });
   } catch (err) {
     console.error(`❌ Error al procesar solicitud de impresión:`, err);
     res.status(500).json({
