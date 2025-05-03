@@ -607,9 +607,9 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
     printer.println("PROMO");
   }
 
-  // printer.newLine();
-  // printer.newLine();
-  // printer.newLine();
+  printer.newLine();
+  printer.newLine();
+  printer.newLine();
   // Añadir línea continua centrada de un tercio del ancho
   printer.alignCenter();
   const fullWidth = printer.getWidth() || 30; // Ancho predeterminado si no está disponible
