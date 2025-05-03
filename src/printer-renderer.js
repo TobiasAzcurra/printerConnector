@@ -554,6 +554,71 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
  * Imprime una etiqueta de precio para góndola
  */
 async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
+  // ENCABEZADO DEL TICKET
+  printer.alignCenter();
+  if (config.useHeaderLogo && fs.existsSync(logoHeaderPath)) {
+    try {
+      console.log("📷 Imprimiendo logo de encabezado...");
+      // Crear una versión redimensionada del logo del encabezado
+      const sharp = require("sharp");
+      const tempHeaderLogoPath = path.join(
+        __dirname,
+        "..",
+        "temp-header-logo.png"
+      );
+
+      // Redimensionar a un ancho que sea el doble del footer (200px)
+      await sharp(logoHeaderPath)
+        .resize({ width: 400 }) // El doble del tamaño del footer (100px)
+        .toFile(tempHeaderLogoPath);
+
+      // Imprimir la versión redimensionada
+      await printer.printImage(tempHeaderLogoPath);
+
+      // Eliminar el archivo temporal
+      fs.unlinkSync(tempHeaderLogoPath);
+    } catch (err) {
+      console.error(
+        "⚠️ No se pudo imprimir el logo de encabezado:",
+        err.message
+      );
+    }
+  }
+
+  printer.newLine();
+
+  printer.alignCenter();
+
+  // Textos de promo
+  if (useFontTicket) {
+    try {
+      const imagenEmpresa = await textRenderer.renderizarTexto(
+        config.clienteId,
+        "2x1",
+        { fontSize: 320, centerText: true, bold: true }
+      );
+      await imprimirImagenTexto(printer, imagenEmpresa);
+    } catch (err) {
+      printer.bold(true);
+      printer.println("PROMO");
+    }
+  } else {
+    printer.bold(true);
+    printer.println("PROMO");
+  }
+
+  // printer.newLine();
+  // printer.newLine();
+  // printer.newLine();
+  // Añadir línea continua centrada de un tercio del ancho
+  printer.alignCenter();
+  const fullWidth = printer.getWidth() || 30; // Ancho predeterminado si no está disponible
+  const lineWidth = Math.floor(fullWidth / 3); // Un tercio del ancho
+  const continuousLine = "_".repeat(lineWidth);
+  printer.println(continuousLine);
+  printer.newLine();
+  printer.newLine();
+  printer.newLine();
   printer.alignCenter();
 
   // Nombre del producto

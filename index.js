@@ -168,6 +168,7 @@ async function imprimirConfirmacion() {
   if (config.useHeaderLogo && fs.existsSync(logoHeaderPath)) {
     try {
       console.log("📷 Imprimiendo logo de encabezado...");
+      printer.alignCenter();
       await printer.printImage(logoHeaderPath);
       console.log("✅ Logo de encabezado impreso correctamente");
     } catch (err) {
@@ -184,6 +185,9 @@ async function imprimirConfirmacion() {
       );
     }
   }
+
+  printer.newLine();
+  printer.newLine();
 
   // Comprobar si se debe usar fuente personalizada para la confirmación
   if (config.useFontTicket) {
@@ -229,6 +233,8 @@ async function imprimirConfirmacion() {
     printer.bold(true);
     printer.println("Impresora conectada correctamente");
   }
+
+  printer.newLine();
 
   // Imprimir logo inferior si existe y está habilitado
   if (config.useFooterLogo && fs.existsSync(logoFooterPath)) {
