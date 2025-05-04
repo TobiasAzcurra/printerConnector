@@ -589,38 +589,41 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
 
   printer.alignCenter();
 
-  // Textos de promo
-  if (useFontTicket) {
-    try {
-      const imagenEmpresa = await textRenderer.renderizarTexto(
-        config.clienteId,
-        "2x1",
-        { fontSize: 320, centerText: true, bold: true }
-      );
-      await imprimirImagenTexto(printer, imagenEmpresa);
-    } catch (err) {
+  // Textos de promo - Solo mostrar si existe la propiedad header en el producto
+  if (data.header) {
+    printer.alignCenter();
+
+    if (useFontTicket) {
+      try {
+        const imagenEmpresa = await textRenderer.renderizarTexto(
+          config.clienteId,
+          data.header, // Usar el valor real del header en lugar de "-15%"
+          { fontSize: 320, centerText: true, bold: true }
+        );
+        await imprimirImagenTexto(printer, imagenEmpresa);
+      } catch (err) {
+        printer.bold(true);
+        printer.println(data.header || "PROMO"); // Usar el valor del header o "PROMO" como fallback
+      }
+    } else {
       printer.bold(true);
-      printer.println("PROMO");
+      printer.println(data.header || "PROMO"); // Usar el valor del header o "PROMO" como fallback
     }
-  } else {
-    printer.bold(true);
-    printer.println("PROMO");
+
+    printer.newLine();
+    printer.newLine();
+    printer.newLine();
+    // Añadir línea continua centrada de un tercio del ancho
+    printer.alignCenter();
+    const fullWidth = printer.getWidth() || 30; // Ancho predeterminado si no está disponible
+    const lineWidth = Math.floor(fullWidth / 3); // Un tercio del ancho
+    const continuousLine = "_".repeat(lineWidth);
+    printer.println(continuousLine);
+    printer.newLine();
+    printer.newLine();
+    printer.newLine();
+    printer.alignCenter();
   }
-
-  printer.newLine();
-  printer.newLine();
-  printer.newLine();
-  // Añadir línea continua centrada de un tercio del ancho
-  printer.alignCenter();
-  const fullWidth = printer.getWidth() || 30; // Ancho predeterminado si no está disponible
-  const lineWidth = Math.floor(fullWidth / 3); // Un tercio del ancho
-  const continuousLine = "_".repeat(lineWidth);
-  printer.println(continuousLine);
-  printer.newLine();
-  printer.newLine();
-  printer.newLine();
-  printer.alignCenter();
-
   // Nombre del producto
   let nombreProducto = data.productName || "Producto sin nombre";
   const nombreFormateado =

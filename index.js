@@ -289,25 +289,6 @@ async function imprimirConfirmacion() {
   }
 }
 
-// Obtener fecha actual formateada
-function getCurrentDate() {
-  const today = new Date();
-  return today.toLocaleDateString("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-// Obtener hora actual formateada
-function getCurrentTime() {
-  const now = new Date();
-  return now.toLocaleTimeString("es-AR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 // 🔁 Reinicio completo del conector
 async function reiniciarConector() {
   console.log("🔁 Recargando configuración...");
