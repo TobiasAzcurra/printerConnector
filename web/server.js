@@ -270,7 +270,7 @@ app.post("/api/imprimir", (req, res) => {
 
       // Creamos un array para guardar los trabajos de impresión
       const printJobs = data.products.map((product, index) => {
-        // Crear objeto de datos para cada producto
+        // Create data object for each product
         const productData = {
           templateId: templateId,
           productName: product.productName,
@@ -278,13 +278,18 @@ app.post("/api/imprimir", (req, res) => {
           _templateInfo: {
             id: templateId,
             timestamp: new Date().toISOString(),
-            batchId: `batch-${Date.now()}`, // ID único para este lote
-            index: index, // Índice en el lote
-            total: data.products.length, // Total de productos en el lote
+            batchId: `batch-${Date.now()}`,
+            index: index,
+            total: data.products.length,
           },
         };
 
-        // Validar los datos contra la plantilla
+        // Solo añadir header si existe y tiene un valor no vacío
+        if (product.header && product.header.trim() !== "") {
+          productData.header = product.header;
+        }
+
+        // Validate data against template
         const validacion = templates.validarDatosParaPlantilla(
           templateId,
           productData
