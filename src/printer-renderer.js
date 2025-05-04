@@ -624,7 +624,8 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
     printer.newLine();
     printer.alignCenter();
   }
-  // Nombre del producto
+
+  // Nombre del producto - con manejo de líneas múltiples
   let nombreProducto = data.productName || "Producto sin nombre";
   const nombreFormateado =
     nombreProducto.charAt(0).toUpperCase() +
@@ -632,20 +633,91 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
 
   if (useFontTicket) {
     try {
-      const imgProduct = await textRenderer.renderizarTexto(
-        config.clienteId,
-        nombreFormateado,
-        { fontSize: 40, centerText: true, bold: true }
-      );
-      await imprimirImagenTexto(printer, imgProduct);
+      // Estimar el ancho promedio de un carácter (en píxeles) con el tamaño de fuente dado
+      const caracteresMaxPorLinea = Math.floor(260 / 5); // Estimamos ~10px de ancho por carácter con fontSize 40
+
+      // Dividir el texto si es demasiado largo para el ancho del ticket
+      if (nombreFormateado.length > caracteresMaxPorLinea) {
+        // Encontrar un buen punto para dividir (un espacio cerca de la mitad)
+        const mitad = Math.floor(nombreFormateado.length / 2);
+        let puntoCorte = nombreFormateado.lastIndexOf(" ", mitad);
+
+        // Si no hay espacio antes de la mitad, buscar después
+        if (puntoCorte === -1) {
+          puntoCorte = nombreFormateado.indexOf(" ", mitad);
+        }
+
+        // Si no hay espacios, dividir exactamente a la mitad
+        if (puntoCorte === -1) {
+          puntoCorte = mitad;
+        }
+
+        // Dividir el texto en dos líneas
+        const primeraLinea = nombreFormateado.substring(0, puntoCorte);
+        const segundaLinea = nombreFormateado.substring(
+          puntoCorte + (nombreFormateado[puntoCorte] === " " ? 1 : 0)
+        );
+
+        // Imprimir cada línea
+        const imgProductLine1 = await textRenderer.renderizarTexto(
+          config.clienteId,
+          primeraLinea,
+          { fontSize: 28, centerText: true, bold: true }
+        );
+        await imprimirImagenTexto(printer, imgProductLine1);
+
+        const imgProductLine2 = await textRenderer.renderizarTexto(
+          config.clienteId,
+          segundaLinea,
+          { fontSize: 28, centerText: true, bold: true }
+        );
+        await imprimirImagenTexto(printer, imgProductLine2);
+      } else {
+        // El texto cabe en una sola línea
+        const imgProduct = await textRenderer.renderizarTexto(
+          config.clienteId,
+          nombreFormateado,
+          { fontSize: 28, centerText: true, bold: true }
+        );
+        await imprimirImagenTexto(printer, imgProduct);
+      }
     } catch (err) {
       printer.bold(true);
       printer.println(nombreFormateado);
       printer.bold(false);
     }
   } else {
+    // Para impresión sin fuente personalizada
     printer.bold(true);
-    printer.println(nombreFormateado);
+
+    // Dividir el texto largo en múltiples líneas
+    const caracteresMaxPorLinea = printer.getWidth() || 32;
+    if (nombreFormateado.length > caracteresMaxPorLinea) {
+      // Dividir el texto en palabras
+      const palabras = nombreFormateado.split(" ");
+      let lineaActual = "";
+
+      // Construir líneas respetando el ancho máximo
+      for (const palabra of palabras) {
+        if (lineaActual.length + 1 + palabra.length > caracteresMaxPorLinea) {
+          // La palabra no cabe en la línea actual, imprimir la línea y comenzar una nueva
+          printer.println(lineaActual);
+          lineaActual = palabra;
+        } else {
+          // La palabra cabe, agregarla a la línea actual
+          lineaActual = lineaActual ? `${lineaActual} ${palabra}` : palabra;
+        }
+      }
+
+      // Imprimir la última línea si quedó algo
+      if (lineaActual) {
+        printer.println(lineaActual);
+      }
+    } else {
+      // El texto cabe en una sola línea
+      printer.println(nombreFormateado);
+    }
+
     printer.bold(false);
   }
 
