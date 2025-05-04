@@ -598,7 +598,7 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
         const imagenEmpresa = await textRenderer.renderizarTexto(
           config.clienteId,
           data.header, // Usar el valor real del header en lugar de "-15%"
-          { fontSize: 320, centerText: true, bold: true }
+          { fontSize: 260, centerText: true, bold: true }
         );
         await imprimirImagenTexto(printer, imagenEmpresa);
       } catch (err) {
