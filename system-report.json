@@ -1,0 +1,42 @@
+{
+  "timestamp": "2025-08-08T18:27:40.219Z",
+  "system": {
+    "hostname": "DESKTOP-RP27LG8",
+    "platform": "win32",
+    "arch": "x64",
+    "memory": "15 GB"
+  },
+  "network": {
+    "interfaces": {
+      "Wi-Fi": [
+        {
+          "address": "fe80::c5bb:16d2:f090:f87d",
+          "family": "IPv6",
+          "mac": "60:ff:9e:9e:30:1e"
+        },
+        {
+          "address": "192.168.0.4",
+          "family": "IPv4",
+          "mac": "60:ff:9e:9e:30:1e"
+        }
+      ],
+      "Loopback Pseudo-Interface 1": []
+    },
+    "detectedRanges": [
+      "192.168.0.",
+      "192.168.1.",
+      "192.168.100."
+    ]
+  },
+  "config": {
+    "clienteId": "desktoprp27lg8-9e301e",
+    "printerIP": "192.168.0.50",
+    "printerPort": 9100,
+    "businessName": "Mi Negocio",
+    "ticketWidth": 48,
+    "useHeaderLogo": true,
+    "useFooterLogo": true,
+    "useFontTicket": false
+  },
+  "printerTest": true
+}

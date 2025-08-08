@@ -1,0 +1,21 @@
+TICKETCONNECTOR - MANUAL DE USUARIO 
+========================================= 
+ 
+INSTALACION: 
+1. Ejecutar como Administrador: install-automatico.bat 
+2. Esperar que termine la instalacion 
+3. Se abrira automaticamente la interfaz web 
+ 
+CONFIGURACION: 
+1. Configurar IP de impresora en la pestana "Conexion" 
+2. Configurar datos del negocio en "Ticket" 
+3. Subir logos en "Logos" (opcional) 
+4. Hacer prueba de impresion 
+ 
+ARCHIVOS INCLUIDOS: 
+- install-automatico.bat: Instalador principal 
+- uninstall.bat: Desinstalador 
+- status.bat: Ver estado del sistema 
+- ver-logs.bat: Ver logs de error 
+ 
+SOPORTE: https://conabsolute.com 

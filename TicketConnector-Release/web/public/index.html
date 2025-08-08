@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conabsolute - Configuración</title>
+    <style>
+      :root {
+        --primary-color: #4a6cf7;
+        --accent-color: #0ee6b7;
+        --dark-color: #1e293b;
+        --light-color: #f8fafc;
+        --error-color: #ef4444;
+        --success-color: #22c55e;
+      }
+
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        padding: 2rem;
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #f9fafb;
+        color: var(--dark-color);
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+
+      .logo {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+      }
+
+      .container {
+        background-color: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+          0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      }
+
+      h1 {
+        font-size: 1.8rem;
+        color: var(--dark-color);
+        margin-top: 0;
+      }
+
+      h2 {
+        font-size: 1.4rem;
+        color: var(--dark-color);
+        margin-top: 0;
+      }
+
+      .form-group {
+        margin-bottom: 1.5rem;
+      }
+
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--dark-color);
+      }
+
+      input {
+        width: 100%;
+        margin: 0.25rem 0 0.5rem;
+        padding: 0.75rem;
+        font-size: 1rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        box-sizing: border-box;
+        transition: border-color 0.2s ease;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(74, 108, 247, 0.1);
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        margin: 0.5rem 0;
+      }
+
+      .checkbox-group input[type="checkbox"] {
+        width: auto;
+        margin-right: 0.5rem;
+      }
+
+      .checkbox-group label {
+        margin: 0;
+        font-weight: normal;
+      }
+
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 1.5rem;
+      }
+
+      .tab {
+        padding: 0.75rem 1.5rem;
+        cursor: pointer;
+        font-weight: 600;
+        color: #64748b;
+        transition: all 0.2s ease;
+      }
+
+      .tab:hover {
+        color: var(--primary-color);
+      }
+
+      .tab.active {
+        color: var(--primary-color);
+        border-bottom: 2px solid var(--primary-color);
+      }
+
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      .buttons {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+      }
+
+      button {
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex: 1;
+      }
+
+      .btn-primary {
+        background-color: var(--primary-color);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background-color: #3b5de8;
+      }
+
+      .btn-secondary {
+        background-color: #e2e8f0;
+        color: var(--dark-color);
+      }
+
+      .btn-secondary:hover {
+        background-color: #cbd5e1;
+      }
+
+      .btn-test {
+        background-color: var(--accent-color);
+        color: var(--dark-color);
+      }
+
+      .btn-test:hover {
+        background-color: #0cd0a5;
+      }
+
+      #msg {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        border-radius: 6px;
+        font-weight: 500;
+        text-align: center;
+        display: none;
+      }
+
+      .success {
+        background-color: rgba(34, 197, 94, 0.1);
+        color: var(--success-color);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+        display: block !important;
+      }
+
+      .error {
+        background-color: rgba(239, 68, 68, 0.1);
+        color: var(--error-color);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        display: block !important;
+      }
+
+      .hint {
+        font-size: 0.85rem;
+        color: #64748b;
+        margin-top: 0.25rem;
+      }
+
+      .footer {
+        margin-top: 2rem;
+        text-align: center;
+        font-size: 0.85rem;
+        color: #64748b;
+      }
+
+      .file-upload {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 1.5rem;
+        background-color: #f8fafc;
+        border: 2px dashed #cbd5e1;
+        border-radius: 6px;
+        margin: 1rem 0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .file-upload:hover {
+        border-color: var(--primary-color);
+        background-color: rgba(74, 108, 247, 0.05);
+      }
+
+      .file-upload svg {
+        width: 3rem;
+        height: 3rem;
+        color: #64748b;
+        margin-bottom: 1rem;
+      }
+
+      .file-upload p {
+        margin: 0;
+        color: #64748b;
+        font-weight: 500;
+      }
+
+      .file-upload input[type="file"] {
+        display: none;
+      }
+
+      .logo-preview {
+        max-width: 100%;
+        max-height: 120px;
+        margin-top: 1rem;
+        display: none;
+      }
+
+      .logo-section {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      /* Estilos para la modal de prueba de impresión */
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+      }
+
+      .modal-content {
+        background-color: white;
+        margin: 15% auto;
+        padding: 2rem;
+        border-radius: 12px;
+        width: 80%;
+        max-width: 500px;
+        animation: slideIn 0.3s ease-out;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateY(-50px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+
+      .close {
+        color: #64748b;
+        float: right;
+        font-size: 1.5rem;
+        font-weight: bold;
+        cursor: pointer;
+      }
+
+      .close:hover {
+        color: var(--dark-color);
+      }
+
+      /* Estilos para la sección de plantillas */
+      .select-input {
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 1rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background-color: white;
+        margin-bottom: 1rem;
+      }
+
+      .template-details {
+        background-color: #f8fafc;
+        border-radius: 6px;
+        padding: 1.5rem;
+        margin-top: 1rem;
+        border: 1px solid #e2e8f0;
+      }
+
+      .template-fields {
+        margin: 1.5rem 0;
+      }
+
+      .template-fields h3 {
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+        color: var(--dark-color);
+      }
+
+      .template-fields ul {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 1.5rem 0;
+      }
+
+      .template-fields li {
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+        background-color: #edf2f7;
+        border-radius: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .template-fields li span {
+        font-family: monospace;
+        font-size: 0.9rem;
+        background-color: #e2e8f0;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+      }
+
+      .test-print-section {
+        margin-top: 1.5rem;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="logo">TicketConnector</div>
+      <p>Configuración de conexión e impresora</p>
+    </div>
+
+    <div class="container">
+      <div class="tabs">
+        <div class="tab active" onclick="showTab('conexion')">Conexión</div>
+        <div class="tab" onclick="showTab('ticket')">Ticket</div>
+        <div class="tab" onclick="showTab('apariencia')">Logos</div>
+        <div class="tab" onclick="showTab('fuentes')">Fuentes</div>
+        <div class="tab" onclick="showTab('plantillas')">Plantillas</div>
+      </div>
+
+      <!-- Tab Conexión -->
+      <div id="conexion" class="tab-content active">
+        <h1>Configuración de Conexión</h1>
+
+        <div class="form-group">
+          <label for="clienteId">ID de Cliente</label>
+          <input id="clienteId" placeholder="burger123" />
+          <div class="hint">Identificador único de tu negocio</div>
+        </div>
+
+        <div class="form-group">
+          <label for="printerIP">IP de la Impresora</label>
+          <input id="printerIP" placeholder="192.168.100.200" />
+          <div class="hint">
+            Dirección IP de tu impresora térmica en la red local
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="printerPort">Puerto</label>
+          <input id="printerPort" placeholder="9100" type="number" />
+          <div class="hint">Normalmente 9100 para impresoras térmicas</div>
+        </div>
+      </div>
+
+      <!-- Tab Ticket -->
+      <div id="ticket" class="tab-content">
+        <h1>Configuración del Ticket</h1>
+
+        <div class="form-group">
+          <label for="businessName">Nombre del Negocio</label>
+          <input id="businessName" placeholder="Mi Restaurante" />
+          <div class="hint">
+            Aparecerá en el encabezado de todos los tickets
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="ticketWidth">Ancho del Ticket</label>
+          <input
+            id="ticketWidth"
+            type="number"
+            min="32"
+            max="64"
+            placeholder="48"
+          />
+          <div class="hint">Ancho en número de caracteres (estándar: 48)</div>
+        </div>
+      </div>
+
+      <!-- Tab Logos -->
+      <div id="apariencia" class="tab-content">
+        <h1>Logos del Ticket</h1>
+
+        <!-- Logo de Encabezado -->
+        <div class="logo-section">
+          <h2>Logo de Encabezado</h2>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="useHeaderLogo" checked />
+              <label for="useHeaderLogo">Usar logo en la parte superior</label>
+            </div>
+            <div class="hint">Se imprime al inicio del ticket</div>
+          </div>
+
+          <div class="form-group" id="header-logo-upload-container">
+            <label>Logo de Encabezado</label>
+            <div
+              class="file-upload"
+              onclick="document.getElementById('header-logo-file').click()"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <p>Haz clic para subir logo de encabezado</p>
+              <input
+                type="file"
+                id="header-logo-file"
+                accept="image/*"
+                onchange="previewLogo(this, 'header-logo-preview')"
+              />
+            </div>
+            <img
+              id="header-logo-preview"
+              class="logo-preview"
+              src="#"
+              alt="Vista previa del logo de encabezado"
+            />
+            <div class="hint">
+              Formato recomendado: PNG o JPG en blanco y negro, máximo 350px de
+              ancho
+            </div>
+          </div>
+        </div>
+
+        <!-- Logo de Pie -->
+        <div class="logo-section">
+          <h2>Logo de Pie</h2>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="useFooterLogo" checked />
+              <label for="useFooterLogo">Usar logo en la parte inferior</label>
+            </div>
+            <div class="hint">Se imprime al final del ticket</div>
+          </div>
+
+          <div class="form-group" id="footer-logo-upload-container">
+            <label>Logo de Pie</label>
+            <div
+              class="file-upload"
+              onclick="document.getElementById('footer-logo-file').click()"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <p>Haz clic para subir logo de pie</p>
+              <input
+                type="file"
+                id="footer-logo-file"
+                accept="image/*"
+                onchange="previewLogo(this, 'footer-logo-preview')"
+              />
+            </div>
+            <img
+              id="footer-logo-preview"
+              class="logo-preview"
+              src="#"
+              alt="Vista previa del logo de pie"
+            />
+            <div class="hint">
+              Formato recomendado: PNG o JPG en blanco y negro, máximo 250px de
+              ancho
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Fuentes -->
+      <div id="fuentes" class="tab-content">
+        <h1>Fuentes Personalizadas</h1>
+
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="useFontTicket" />
+            <label for="useFontTicket"
+              >Usar fuente personalizada en el ticket</label
+            >
+          </div>
+          <div class="hint">
+            Aplica tu fuente personalizada en todo el texto del ticket
+          </div>
+        </div>
+
+        <div class="form-group" id="font-upload-container">
+          <label>Archivo de Fuente (TTF)</label>
+          <div
+            class="file-upload"
+            onclick="document.getElementById('custom-font-file').click()"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <p>Haz clic para subir fuente personalizada (.ttf)</p>
+            <input
+              type="file"
+              id="custom-font-file"
+              accept=".ttf"
+              onchange="previewFont(this)"
+            />
+          </div>
+
+          <div id="font-preview" style="display: none; margin-top: 1rem">
+            <p>Vista previa de la fuente:</p>
+            <div
+              id="font-preview-image"
+              style="
+                max-width: 100%;
+                margin-top: 0.5rem;
+                background-color: #f8fafc;
+                padding: 1rem;
+                border-radius: 6px;
+              "
+            ></div>
+          </div>
+
+          <div class="hint">
+            Formato: TTF (TrueType Font). Sube una fuente instalada en tu
+            sistema.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="fontTestText">Texto de Prueba</label>
+          <input
+            id="fontTestText"
+            placeholder="Escribe texto para probar la fuente"
+            value="HAMBURGUESA $1250"
+          />
+          <button
+            class="btn-test"
+            onclick="testFont()"
+            style="margin-top: 0.5rem"
+          >
+            Ver Previsualización
+          </button>
+          <div class="hint">
+            Escribe texto para ver cómo se verá con la fuente personalizada
+          </div>
+        </div>
+
+        <div id="current-font-info" style="margin-top: 1.5rem; display: none">
+          <h2>Fuente Actual</h2>
+          <div
+            id="current-font-details"
+            class="hint"
+            style="margin-bottom: 1rem"
+          ></div>
+          <button
+            class="btn-secondary"
+            onclick="eliminarFuente()"
+            style="background-color: #fee2e2; color: #ef4444"
+          >
+            Eliminar Fuente
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Plantillas -->
+      <div id="plantillas" class="tab-content">
+        <h1>Plantillas de Impresión</h1>
+
+        <div class="form-group">
+          <label for="template-select">Plantilla activa</label>
+          <select id="template-select" class="select-input">
+            <option value="receipt">Ticket de Venta</option>
+            <option value="price-tag">Etiqueta de Precio</option>
+          </select>
+          <div class="hint">
+            Selecciona la plantilla que quieres utilizar o configurar
+          </div>
+        </div>
+
+        <div id="template-details" class="template-details">
+          <h2 id="template-title">Ticket de Venta</h2>
+          <p id="template-description">
+            Plantilla estándar para tickets de venta
+          </p>
+
+          <div class="template-fields">
+            <h3>Campos Requeridos</h3>
+            <ul id="required-fields">
+              <!-- Se llenará dinámicamente -->
+            </ul>
+
+            <h3>Campos Opcionales</h3>
+            <ul id="optional-fields">
+              <!-- Se llenará dinámicamente -->
+            </ul>
+          </div>
+
+          <div class="test-print-section">
+            <h3>Prueba de Impresión</h3>
+            <button class="btn-test" onclick="testImpresionPlantilla()">
+              🖨️ Imprimir Prueba
+            </button>
+            <div class="hint">
+              Genera un ejemplo para probar la plantilla seleccionada
+            </div>
+          </div>
+        </div>
+
+        <div class="buttons">
+          <button class="btn-secondary" onclick="showTemplateJSON()">
+            Ver JSON de Plantilla
+          </button>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button class="btn-primary" onclick="guardar()">
+          💾 Guardar Cambios
+        </button>
+        <button class="btn-test" onclick="testImpresora()">
+          🖨️ Imprimir Prueba
+        </button>
+      </div>
+
+      <div id="msg"></div>
+    </div>
+    <!-- Modal para test de impresión -->
+    <div id="testModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h2>Prueba de Impresión</h2>
+        <p>Se enviará un ticket de prueba a la impresora configurada.</p>
+        <p>Asegúrate de guardar los cambios antes de realizar la prueba.</p>
+
+        <div class="buttons">
+          <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn-primary" onclick="confirmarTest()">
+            Imprimir Prueba
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Ticket Connector v1.0 | Conabsolute</p>
+    </div>
+
+    <script>
+      // Cargar la configuración actual
+      window.onload = function () {
+        fetch("/api/config")
+          .then((res) => res.json())
+          .then((cfg) => {
+            // Valores básicos
+            document.getElementById("clienteId").value = cfg.clienteId || "";
+            document.getElementById("printerIP").value = cfg.printerIP || "";
+            document.getElementById("printerPort").value =
+              cfg.printerPort || 9100;
+
+            // Valores avanzados
+            document.getElementById("businessName").value =
+              cfg.businessName || "";
+            document.getElementById("ticketWidth").value =
+              cfg.ticketWidth || 48;
+
+            // Opciones de logos
+            document.getElementById("useHeaderLogo").checked =
+              cfg.useHeaderLogo !== false;
+            document.getElementById("useFooterLogo").checked =
+              cfg.useFooterLogo !== false;
+
+            // Opción de fuente personalizada
+            if (document.getElementById("useFontTicket")) {
+              document.getElementById("useFontTicket").checked =
+                cfg.useFontTicket === true;
+            }
+
+            // Comprobar si hay logos y mostrar vista previa
+            checkLogosExist();
+
+            // Cargar información de fuente personalizada
+            cargarInfoFuente();
+
+            // Cargar plantillas
+            cargarPlantillas();
+          })
+          .catch((err) => {
+            mostrarMensaje("No se pudo cargar la configuración", false);
+            console.error("Error al cargar configuración:", err);
+          });
+      };
+
+      // Cambiar entre tabs
+      function showTab(tabId) {
+        // Ocultar todos los contenidos
+        document.querySelectorAll(".tab-content").forEach((content) => {
+          content.classList.remove("active");
+        });
+
+        // Deseleccionar todos los tabs
+        document.querySelectorAll(".tab").forEach((tab) => {
+          tab.classList.remove("active");
+        });
+
+        // Activar el tab seleccionado
+        document.getElementById(tabId).classList.add("active");
+
+        // Activar el botón correspondiente
+        document.querySelectorAll(".tab").forEach((tab) => {
+          if (tab.textContent.toLowerCase().includes(tabId)) {
+            tab.classList.add("active");
+          }
+        });
+
+        // Si el tab es "plantillas", cargar los detalles de la plantilla seleccionada
+        if (tabId === "plantillas") {
+          cargarDetallesPlantilla();
+        }
+      }
+
+      // Verificar si existen logos y mostrar vista previa
+      function checkLogosExist() {
+        fetch("/api/logo-exists")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.headerExists) {
+              // Mostrar vista previa del logo de encabezado
+              document.getElementById("header-logo-preview").src =
+                "/api/logo-header?t=" + new Date().getTime(); // Evitar caché
+              document.getElementById("header-logo-preview").style.display =
+                "block";
+            }
+
+            if (data.footerExists) {
+              // Mostrar vista previa del logo de pie
+              document.getElementById("footer-logo-preview").src =
+                "/api/logo-footer?t=" + new Date().getTime(); // Evitar caché
+              document.getElementById("footer-logo-preview").style.display =
+                "block";
+            }
+          })
+          .catch((err) => console.error("Error al verificar logos:", err));
+      }
+
+      // Vista previa del logo seleccionado
+      function previewLogo(input, previewId) {
+        if (input.files && input.files[0]) {
+          const reader = new FileReader();
+
+          reader.onload = function (e) {
+            document.getElementById(previewId).src = e.target.result;
+            document.getElementById(previewId).style.display = "block";
+          };
+
+          reader.readAsDataURL(input.files[0]);
+        }
+      }
+
+      // Cargar información de fuente al iniciar
+      function cargarInfoFuente() {
+        fetch("/api/font-info")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.fontInfo) {
+              document.getElementById("current-font-info").style.display =
+                "block";
+              document.getElementById(
+                "current-font-details"
+              ).textContent = `Fuente cargada: ${
+                data.fontInfo.fontFamily || data.fontInfo.fontName
+              } (${new Date(data.fontInfo.dateAdded).toLocaleDateString()})`;
+
+              // Actualizar el checkbox según la configuración
+              document.getElementById("useFontTicket").checked =
+                data.useFontTicket;
+
+              // Cargar previsualización de la fuente
+              testFont();
+            } else {
+              document.getElementById("current-font-info").style.display =
+                "none";
+              document.getElementById("font-preview").style.display = "none";
+            }
+          })
+          .catch((err) => {
+            console.error("Error al cargar información de fuente:", err);
+          });
+      }
+
+      // Previsualizar fuente seleccionada
+      function previewFont(input) {
+        if (input.files && input.files[0]) {
+          const fileName = input.files[0].name;
+          document.getElementById("font-preview").style.display = "block";
+          document.getElementById(
+            "font-preview-image"
+          ).innerHTML = `<div style="background-color: #e2e8f0; padding: 0.5rem; border-radius: 6px; text-align: center;">
+              <p>Archivo seleccionado: ${fileName}</p>
+              <p>Haz clic en "Guardar Cambios" para cargar la fuente.</p>
+            </div>`;
+        }
+      }
+
+      // Probar la fuente con texto personalizado
+      function testFont() {
+        const texto =
+          document.getElementById("fontTestText").value.trim() ||
+          "HAMBURGUESA $1250";
+
+        fetch(`/api/font-preview?text=${encodeURIComponent(texto)}`)
+          .then((res) => {
+            if (!res.ok) throw new Error("No hay fuente configurada");
+            return res.blob();
+          })
+          .then((blob) => {
+            const imgUrl = URL.createObjectURL(blob);
+            const imgEl = document.createElement("img");
+            imgEl.src = imgUrl;
+            imgEl.style.maxWidth = "100%";
+
+            const container = document.getElementById("font-preview-image");
+            container.innerHTML = "";
+            container.appendChild(imgEl);
+            document.getElementById("font-preview").style.display = "block";
+          })
+          .catch((err) => {
+            // Si no hay fuente configurada, ocultamos la previsualización
+            document.getElementById("font-preview").style.display = "none";
+          });
+      }
+
+      // Eliminar fuente personalizada
+      function eliminarFuente() {
+        if (
+          confirm(
+            "¿Estás seguro de que deseas eliminar la fuente personalizada?"
+          )
+        ) {
+          fetch("/api/delete-font", { method: "DELETE" })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.success) {
+                mostrarMensaje("Fuente eliminada correctamente", true);
+                document.getElementById("current-font-info").style.display =
+                  "none";
+                document.getElementById("font-preview").style.display = "none";
+                document.getElementById("custom-font-file").value = "";
+                document.getElementById("useFontTicket").checked = false;
+              } else {
+                mostrarMensaje("Error al eliminar fuente", false);
+              }
+            })
+            .catch((err) => {
+              mostrarMensaje("Error al eliminar fuente", false);
+            });
+        }
+      }
+
+      // Guardar la configuración
+      function guardar() {
+        const clienteId = document.getElementById("clienteId").value.trim();
+        const printerIP = document.getElementById("printerIP").value.trim();
+        const printerPort = parseInt(
+          document.getElementById("printerPort").value,
+          10
+        );
+        const businessName = document
+          .getElementById("businessName")
+          .value.trim();
+        const ticketWidth = parseInt(
+          document.getElementById("ticketWidth").value,
+          10
+        );
+        const useHeaderLogo = document.getElementById("useHeaderLogo").checked;
+        const useFooterLogo = document.getElementById("useFooterLogo").checked;
+        const useFontTicket = document.getElementById("useFontTicket")
+          ? document.getElementById("useFontTicket").checked
+          : false;
+
+        // Validaciones básicas
+        if (!clienteId) {
+          mostrarMensaje("El ID de cliente no puede estar vacío", false);
+          return;
+        }
+
+        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (!ipRegex.test(printerIP)) {
+          mostrarMensaje("Formato de IP inválido", false);
+          return;
+        }
+
+        if (isNaN(printerPort) || printerPort < 1 || printerPort > 65535) {
+          mostrarMensaje("Puerto inválido (debe estar entre 1-65535)", false);
+          return;
+        }
+
+        if (!businessName) {
+          mostrarMensaje("El nombre del negocio no puede estar vacío", false);
+          return;
+        }
+
+        if (isNaN(ticketWidth) || ticketWidth < 32 || ticketWidth > 64) {
+          mostrarMensaje(
+            "El ancho del ticket debe estar entre 32 y 64 caracteres",
+            false
+          );
+          return;
+        }
+
+        const data = {
+          clienteId,
+          printerIP,
+          printerPort,
+          businessName,
+          ticketWidth,
+          useHeaderLogo,
+          useFooterLogo,
+          useFontTicket,
+        };
+
+        // Primero guardamos la configuración
+        fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        })
+          .then((res) => res.json())
+          .then((res) => {
+            let promesas = [];
+
+            // Si hay un archivo de logo de encabezado para subir
+            const headerLogoFile =
+              document.getElementById("header-logo-file").files[0];
+            if (headerLogoFile && useHeaderLogo) {
+              // Crear FormData para enviar el archivo
+              const formData = new FormData();
+              formData.append("logo", headerLogoFile);
+
+              // Subir el logo de encabezado
+              promesas.push(
+                fetch("/api/upload-logo-header", {
+                  method: "POST",
+                  body: formData,
+                }).then((res) => res.json())
+              );
+            }
+
+            // Si hay un archivo de logo de pie para subir
+            const footerLogoFile =
+              document.getElementById("footer-logo-file").files[0];
+            if (footerLogoFile && useFooterLogo) {
+              // Crear FormData para enviar el archivo
+              const formData = new FormData();
+              formData.append("logo", footerLogoFile);
+
+              // Subir el logo de pie
+              promesas.push(
+                fetch("/api/upload-logo-footer", {
+                  method: "POST",
+                  body: formData,
+                }).then((res) => res.json())
+              );
+            }
+
+            // Si hay un archivo de fuente para subir
+            const fontFile =
+              document.getElementById("custom-font-file").files[0];
+            if (fontFile) {
+              const formData = new FormData();
+              formData.append("font", fontFile);
+
+              promesas.push(
+                fetch("/api/upload-font", {
+                  method: "POST",
+                  body: formData,
+                }).then((res) => res.json())
+              );
+            }
+
+            // Si hay promesas de carga de archivos, esperamos que se completen
+            if (promesas.length > 0) {
+              return Promise.all(promesas);
+            } else {
+              return res;
+            }
+          })
+          .then((res) => {
+            mostrarMensaje("Configuración guardada correctamente", true);
+
+            // Actualizar vista previa de logos y fuente
+            checkLogosExist();
+            cargarInfoFuente();
+          })
+          .catch((err) => {
+            mostrarMensaje("Error al guardar la configuración", false);
+            console.error("Error:", err);
+          });
+      }
+
+      // Mostrar mensaje de feedback
+      function mostrarMensaje(mensaje, esExito) {
+        const msgElement = document.getElementById("msg");
+        msgElement.textContent = mensaje;
+        msgElement.className = esExito ? "success" : "error";
+
+        // Ocultar después de 5 segundos
+        setTimeout(() => {
+          msgElement.style.display = "none";
+          msgElement.className = "";
+        }, 5000);
+      }
+
+      // Gestión del modal de prueba
+      function testImpresora() {
+        document.getElementById("testModal").style.display = "block";
+      }
+
+      function closeModal() {
+        document.getElementById("testModal").style.display = "none";
+      }
+
+      // Cerrar modal al hacer clic fuera
+      window.onclick = function (event) {
+        const modal = document.getElementById("testModal");
+        if (event.target == modal) {
+          modal.style.display = "none";
+        }
+      };
+
+      // Enviar prueba de impresión
+      function confirmarTest() {
+        // Obtener datos actuales para el ticket de prueba
+        const businessName = document
+          .getElementById("businessName")
+          .value.trim();
+
+        const testPedido = {
+          id: "TEST-" + Math.floor(Math.random() * 1000),
+          fecha: new Date().toLocaleDateString("es-AR"),
+          hora: new Date().toLocaleTimeString("es-AR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          total: 1250,
+          metodoPago: "efectivo",
+          telefono: "11-2233-4455",
+          businessName: businessName,
+          detallePedido: [
+            {
+              nombre: "HAMBURGUESA COMPLETA",
+              cantidad: 1,
+              precio: 750,
+            },
+            {
+              nombre: "PAPAS FRITAS",
+              cantidad: 1,
+              precio: 350,
+            },
+            {
+              nombre: "GASEOSA 500ML",
+              cantidad: 1,
+              precio: 150,
+            },
+          ],
+          aclaraciones:
+            "Ticket de prueba generado desde la configuración de TicketConnector",
+        };
+
+        fetch("/api/imprimir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(testPedido),
+        })
+          .then((res) => res.json())
+          .then((res) => {
+            closeModal();
+            mostrarMensaje("Ticket de prueba enviado correctamente", true);
+          })
+          .catch((err) => {
+            closeModal();
+            mostrarMensaje("Error al enviar ticket de prueba", false);
+            console.error("Error:", err);
+          });
+      }
+
+      // FUNCIONES PARA PLANTILLAS
+
+      // Objeto para almacenar las plantillas disponibles
+      let plantillasDisponibles = {
+        receipt: {
+          id: "receipt",
+          name: "Ticket de Venta",
+          description: "Plantilla estándar para tickets de venta",
+          requiredFields: ["detallePedido", "total", "metodoPago", "telefono"],
+          optionalFields: ["aclaraciones", "direccion", "envio", "subTotal"],
+        },
+        "price-tag": {
+          id: "price-tag",
+          name: "Etiqueta de Precio",
+          description: "Para imprimir precios en góndola",
+          requiredFields: ["productName", "price"],
+          optionalFields: ["barcode", "offerPrice", "validUntil", "category"],
+        },
+      };
+
+      // Función para cargar la información de las plantillas desde el servidor
+      function cargarPlantillas() {
+        fetch("/api/templates")
+          .then((res) => res.json())
+          .then((data) => {
+            plantillasDisponibles = data;
+            actualizarSelectPlantillas();
+            cargarDetallesPlantilla();
+          })
+          .catch((err) => {
+            console.error("Error al cargar plantillas:", err);
+            // Si hay error, usamos las plantillas por defecto
+            actualizarSelectPlantillas();
+            cargarDetallesPlantilla();
+          });
+      }
+
+      // Función para actualizar el select con las plantillas disponibles
+      function actualizarSelectPlantillas() {
+        const select = document.getElementById("template-select");
+        select.innerHTML = "";
+
+        Object.values(plantillasDisponibles).forEach((plantilla) => {
+          const option = document.createElement("option");
+          option.value = plantilla.id;
+          option.textContent = plantilla.name;
+          select.appendChild(option);
+        });
+      }
+
+      // Función para cargar los detalles de la plantilla seleccionada
+      function cargarDetallesPlantilla() {
+        const templateId = document.getElementById("template-select").value;
+        const template = plantillasDisponibles[templateId];
+
+        if (!template) return;
+
+        // Actualizar título y descripción
+        document.getElementById("template-title").textContent = template.name;
+        document.getElementById("template-description").textContent =
+          template.description;
+
+        // Actualizar campos requeridos
+        const requiredList = document.getElementById("required-fields");
+        requiredList.innerHTML = "";
+        template.requiredFields.forEach((field) => {
+          const li = document.createElement("li");
+          li.innerHTML = `${field} <span>obligatorio</span>`;
+          requiredList.appendChild(li);
+        });
+
+        // Actualizar campos opcionales
+        const optionalList = document.getElementById("optional-fields");
+        optionalList.innerHTML = "";
+        template.optionalFields.forEach((field) => {
+          const li = document.createElement("li");
+          li.innerHTML = `${field} <span>opcional</span>`;
+          optionalList.appendChild(li);
+        });
+      }
+
+      // Función para mostrar el JSON de la plantilla
+      function showTemplateJSON() {
+        const templateId = document.getElementById("template-select").value;
+        const template = plantillasDisponibles[templateId];
+
+        if (!template) return;
+
+        alert(JSON.stringify(template, null, 2));
+      }
+
+      // Función para generar datos de prueba según la plantilla
+      function generarDatosPrueba(templateId) {
+        const datosComunes = {
+          businessName:
+            document.getElementById("businessName").value || "Mi Negocio",
+        };
+
+        switch (templateId) {
+          case "receipt":
+            return {
+              ...datosComunes,
+              id: "TEST-" + Math.floor(Math.random() * 1000),
+              total: 2350,
+              metodoPago: "efectivo",
+              telefono: "11-2233-4455",
+              detallePedido: [
+                {
+                  nombre: "HAMBURGUESA COMPLETA",
+                  cantidad: 1,
+                  precio: 1500,
+                },
+                {
+                  nombre: "PAPAS FRITAS",
+                  cantidad: 1,
+                  precio: 500,
+                },
+                {
+                  nombre: "GASEOSA 500ML",
+                  cantidad: 1,
+                  precio: 350,
+                },
+              ],
+              aclaraciones: "Ticket de prueba - Plantilla de venta",
+            };
+
+          case "price-tag":
+            return {
+              ...datosComunes,
+              productName: "Hamburguesa Completa",
+              price: 1500,
+              category: "Comidas Rápidas",
+              barcode: "7791234567890",
+              offerPrice: 1350,
+              validUntil: "30/04/2025",
+            };
+
+            return {
+              ...datosComunes,
+              date: new Date().toLocaleDateString(),
+              category: "Alimentos",
+              location: "Depósito Principal",
+              items: [
+                { name: "Hamburguesa Simple", quantity: 25, price: 1100 },
+                { name: "Hamburguesa Completa", quantity: 18, price: 1500 },
+                { name: "Papas Fritas", quantity: 40, price: 500 },
+                { name: "Gaseosa 500ml", quantity: 32, price: 350 },
+                { name: "Postre Helado", quantity: 15, price: 600 },
+              ],
+            };
+
+          default:
+            return datosComunes;
+        }
+      }
+
+      // Función para imprimir una prueba con la plantilla seleccionada
+      function testImpresionPlantilla() {
+        const templateId = document.getElementById("template-select").value;
+
+        // Generar datos de prueba según la plantilla
+        const datosPrueba = generarDatosPrueba(templateId);
+
+        // Añadir el ID de la plantilla
+        datosPrueba.templateId = templateId;
+
+        // Enviar petición de impresión
+        fetch("/api/imprimir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(datosPrueba),
+        })
+          .then((res) => res.json())
+          .then((res) => {
+            mostrarMensaje(
+              `Prueba de impresión con plantilla "${templateId}" enviada`,
+              true
+            );
+          })
+          .catch((err) => {
+            mostrarMensaje(`Error al enviar prueba: ${err.message}`, false);
+          });
+      }
+
+      // Evento para cambiar la plantilla seleccionada
+      document.addEventListener("DOMContentLoaded", function () {
+        if (document.getElementById("template-select")) {
+          document
+            .getElementById("template-select")
+            .addEventListener("change", cargarDetallesPlantilla);
+        }
+      });
+    </script>
+  </body>
+</html>

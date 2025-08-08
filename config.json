@@ -1,11 +1,10 @@
 {
-  "clienteId": "burger123",
-  "printerIP": "192.168.0.50",
+  "clienteId": "DESKTOP-RP27LG8-printer",
+  "printerIP": "192.168.1.50",
   "printerPort": 9100,
+  "businessName": "Mi Negocio",
   "ticketWidth": 48,
-  "useLogo": true,
   "useHeaderLogo": true,
   "useFooterLogo": true,
-  "businessName": "ANhelo",
-  "useFontTicket": true
+  "useFontTicket": false
 }
