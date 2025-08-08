@@ -1,6 +1,6 @@
 const ping = require("ping");
 
-const baseIP = "192.168.100."; // Cambiá esto si usás otra red
+const baseIP = "192.168.0."; // Cambiá esto si usás otra red
 const start = 1;
 const end = 254;
 

@@ -1,6 +1,6 @@
 {
   "clienteId": "burger123",
-  "printerIP": "192.168.100.50",
+  "printerIP": "192.168.0.50",
   "printerPort": 9100,
   "ticketWidth": 48,
   "useLogo": true,

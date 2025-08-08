@@ -1,7 +1,7 @@
 const ping = require("ping");
 const net = require("net");
 
-const baseIP = "192.168.100."; // Cambiá si tu red es otra
+const baseIP = "192.168.0."; // Cambiá si tu red es otra
 const puerto = 9100;
 const start = 1;
 const end = 254;
