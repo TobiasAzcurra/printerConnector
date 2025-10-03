@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-08T18:27:40.219Z",
+  "timestamp": "2025-10-03T07:12:04.922Z",
   "system": {
     "hostname": "DESKTOP-RP27LG8",
     "platform": "win32",
@@ -15,7 +15,7 @@
           "mac": "60:ff:9e:9e:30:1e"
         },
         {
-          "address": "192.168.0.4",
+          "address": "192.168.0.8",
           "family": "IPv4",
           "mac": "60:ff:9e:9e:30:1e"
         }
@@ -30,7 +30,7 @@
   },
   "config": {
     "clienteId": "desktoprp27lg8-9e301e",
-    "printerIP": "192.168.0.50",
+    "printerIP": null,
     "printerPort": 9100,
     "businessName": "Mi Negocio",
     "ticketWidth": 48,
@@ -38,5 +38,5 @@
     "useFooterLogo": true,
     "useFontTicket": false
   },
-  "printerTest": true
+  "printerTest": null
 }

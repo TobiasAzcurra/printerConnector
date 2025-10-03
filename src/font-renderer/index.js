@@ -42,7 +42,7 @@ async function registrarFuente(clienteId, fontPath) {
       fontName,
       fontPath: destPath,
       fontFamily:
-        font.names.fontFamily.en || font.names.fontFamily.es || "CustomFont",
+        font.names.fontFamily?.en || font.names.fontFamily?.es || "CustomFont",
       dateAdded: new Date().toISOString(),
     };
 
@@ -88,8 +88,8 @@ async function textoASvg(clienteId, texto, options = {}) {
   const font = opentype.loadSync(fontInfo.fontPath);
 
   // Medir el texto para determinar tamaño del SVG
-  const path = font.getPath(texto, 0, 0, fontSize);
-  const pathBounds = path.getBoundingBox();
+  const pathObj = font.getPath(texto, 0, 0, fontSize);
+  const pathBounds = pathObj.getBoundingBox();
 
   // Calcular dimensiones
   const width = Math.ceil(pathBounds.x2 - pathBounds.x1) + padding * 2;
@@ -100,22 +100,18 @@ async function textoASvg(clienteId, texto, options = {}) {
   if (centerText) {
     textX = width / 2 - (pathBounds.x2 - pathBounds.x1) / 2 - pathBounds.x1;
   }
-
   const textY = padding - pathBounds.y1;
 
   // Crear SVG
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
 
-  // Agregar fondo si se especifica
   if (backgroundColor) {
     svg += `<rect width="100%" height="100%" fill="${backgroundColor}" />`;
   }
 
-  // Agregar el texto
   svg += `<path d="${font
     .getPath(texto, textX, textY, fontSize)
     .toPathData()}" fill="${textColor}" />`;
-
   svg += "</svg>";
 
   return svg;
@@ -130,12 +126,8 @@ async function textoASvg(clienteId, texto, options = {}) {
  */
 async function textoAImagen(clienteId, texto, options = {}) {
   try {
-    // Generar SVG
     const svg = await textoASvg(clienteId, texto, options);
-
-    // Convertir SVG a PNG usando sharp
     const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
-
     return pngBuffer;
   } catch (err) {
     console.error(`Error al convertir texto a imagen: ${err.message}`);
@@ -153,14 +145,12 @@ function obtenerInfoFuente(clienteId) {
   const metadataPath = path.join(clientDir, "font-metadata.json");
 
   if (fs.existsSync(metadataPath)) {
-    // Leer los metadatos
     const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
 
-    // Actualizar la ruta de la fuente para que siempre use la ruta actual
-    const fontName = metadata.fontPath.split("\\").pop(); // Extraer el nombre del archivo
-    metadata.fontPath = path.join(clientDir, fontName);
-
-    return metadata;
+    // Normalizar la ruta de la fuente (por si cambió el cwd)
+    const fontFileName = path.basename(metadata.fontPath);
+    const resolvedPath = path.join(clientDir, fontFileName);
+    return { ...metadata, fontPath: resolvedPath };
   }
 
   return null;

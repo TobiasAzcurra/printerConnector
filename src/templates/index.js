@@ -1,234 +1,255 @@
 // src/templates/index.js
+// Sistema de plantillas y validación de datos
+
 const fs = require("fs");
 const path = require("path");
-const Mustache = require("mustache"); // Necesitaremos instalar esta dependencia
 
-// Directorio para almacenar las plantillas
-const TEMPLATES_DIR = path.join(__dirname, "..", "..", "templates");
+const TEMPLATES_PATH = path.join(__dirname, "templates.json");
 
-// Asegurar que el directorio de plantillas existe
-if (!fs.existsSync(TEMPLATES_DIR)) {
-  fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
-  console.log("📁 Carpeta de plantillas creada");
-}
-
-// Plantillas predefinidas
+// Plantillas por defecto (se mezclan/crean en disco si no existe el archivo)
 const DEFAULT_TEMPLATES = {
   receipt: {
     id: "receipt",
     name: "Ticket de Venta",
     description: "Plantilla estándar para tickets de venta",
-    width: 48,
-    orientation: "portrait",
+    version: 1,
     requiredFields: ["detallePedido", "total", "metodoPago", "telefono"],
-    optionalFields: ["aclaraciones", "direccion", "envio", "subTotal"],
-    sections: {
-      header: {
-        showLogo: true,
-        content: "{{businessName}}",
-      },
-      products: {
-        itemFormat: "{{cantidad}}x {{nombre}}: ${{precio}}",
-      },
-      total: {
-        content: "TOTAL: ${{total}}",
-      },
-      payment: {
-        content: "${{total}} en {{metodoPago}} para el cliente {{telefono}}",
-      },
-      footer: {
-        showLogo: true,
-        content: "Gracias por su compra\nCONABSOLUTE.COM",
-      },
-    },
+    optionalFields: [
+      "aclaraciones",
+      "direccion",
+      "envio",
+      "subTotal",
+      "fecha",
+      "hora",
+      "businessName",
+      "id",
+    ],
   },
   "price-tag": {
     id: "price-tag",
     name: "Etiqueta de Precio",
     description: "Para imprimir precios en góndola",
-    width: 40,
-    orientation: "landscape",
+    version: 1,
     requiredFields: ["productName", "price"],
-    optionalFields: ["barcode", "offerPrice", "validUntil", "category"],
-    sections: {
-      header: {
-        content: "{{businessName}}",
-      },
-      main: {
-        content: "{{productName}}\n${{price}}",
-      },
-      footer: {
-        content: "{{barcode}}",
-      },
-    },
+    optionalFields: [
+      "barcode",
+      "offerPrice",
+      "validUntil",
+      "category",
+      "header",
+      "businessName",
+    ],
   },
 };
 
 /**
- * Inicializa las plantillas predeterminadas si no existen
+ * Lee el archivo de plantillas si existe, de lo contrario crea uno con los defaults.
+ * Además asegura retrocompatibilidad (campos mínimos por plantilla).
  */
-function inicializarPlantillasPredeterminadas() {
-  Object.values(DEFAULT_TEMPLATES).forEach((template) => {
-    const templatePath = path.join(TEMPLATES_DIR, `${template.id}.json`);
-
-    if (!fs.existsSync(templatePath)) {
-      fs.writeFileSync(templatePath, JSON.stringify(template, null, 2));
-      console.log(`✅ Plantilla predeterminada creada: ${template.name}`);
-    }
-  });
-}
-
-/**
- * Obtiene todas las plantillas disponibles
- * @returns {Object} - Objeto con todas las plantillas indexadas por ID
- */
-function obtenerTodasLasPlantillas() {
-  const templates = {};
-
-  fs.readdirSync(TEMPLATES_DIR).forEach((file) => {
-    if (file.endsWith(".json")) {
-      try {
-        const templatePath = path.join(TEMPLATES_DIR, file);
-        const templateData = JSON.parse(fs.readFileSync(templatePath, "utf8"));
-        templates[templateData.id] = templateData;
-      } catch (err) {
-        console.error(`❌ Error al cargar plantilla ${file}:`, err.message);
-      }
-    }
-  });
-
-  return templates;
-}
-
-/**
- * Obtiene una plantilla por su ID
- * @param {string} templateId - ID de la plantilla
- * @returns {Object|null} - Datos de la plantilla o null si no existe
- */
-function obtenerPlantilla(templateId) {
-  const templatePath = path.join(TEMPLATES_DIR, `${templateId}.json`);
-
-  if (fs.existsSync(templatePath)) {
+function loadTemplatesFromDisk() {
+  let data = {};
+  if (fs.existsSync(TEMPLATES_PATH)) {
     try {
-      return JSON.parse(fs.readFileSync(templatePath, "utf8"));
-    } catch (err) {
-      console.error(`❌ Error al leer plantilla ${templateId}:`, err.message);
-      return null;
+      data = JSON.parse(fs.readFileSync(TEMPLATES_PATH, "utf8")) || {};
+    } catch (e) {
+      console.warn(
+        "⚠️  templates.json corrupto o ilegible, se regenerará con defaults."
+      );
+      data = {};
     }
   }
 
-  return null;
+  // Mezclar con defaults sin pisar personalizaciones existentes
+  const merged = { ...DEFAULT_TEMPLATES, ...data };
+
+  // Asegurar campos obligatorios en cada plantilla
+  for (const [id, tpl] of Object.entries(merged)) {
+    merged[id] = ensureTemplateShape(id, tpl);
+  }
+
+  // Guardar si no existía o estaba corrupto
+  saveTemplatesToDisk(merged);
+  return merged;
 }
 
+function saveTemplatesToDisk(templates) {
+  fs.writeFileSync(TEMPLATES_PATH, JSON.stringify(templates, null, 2));
+}
+
+function ensureTemplateShape(id, tpl) {
+  const base = DEFAULT_TEMPLATES[id] || {};
+  return {
+    id: tpl.id || id,
+    name: tpl.name || base.name || id,
+    description: tpl.description || base.description || "",
+    version: typeof tpl.version === "number" ? tpl.version : base.version || 1,
+    requiredFields: Array.isArray(tpl.requiredFields)
+      ? tpl.requiredFields
+      : base.requiredFields || [],
+    optionalFields: Array.isArray(tpl.optionalFields)
+      ? tpl.optionalFields
+      : base.optionalFields || [],
+  };
+}
+
+// Estado en memoria (se inicializa al requerir el módulo)
+let templatesCache = loadTemplatesFromDisk();
+
 /**
- * Guarda una nueva plantilla o actualiza una existente
- * @param {Object} template - Datos de la plantilla
- * @returns {boolean} - true si se guardó correctamente
+ * API pública
  */
+
+function obtenerTodasLasPlantillas() {
+  // Devolver copia inmutable
+  return JSON.parse(JSON.stringify(templatesCache));
+}
+
+function obtenerPlantilla(id) {
+  return templatesCache[id] ? { ...templatesCache[id] } : null;
+}
+
 function guardarPlantilla(template) {
-  if (!template || !template.id) {
-    console.error("❌ Error: La plantilla debe tener un ID");
-    return false;
-  }
+  // Validaciones mínimas
+  if (!template || !template.id) return false;
+
+  const normalized = ensureTemplateShape(template.id, template);
+  templatesCache[normalized.id] = normalized;
 
   try {
-    const templatePath = path.join(TEMPLATES_DIR, `${template.id}.json`);
-    fs.writeFileSync(templatePath, JSON.stringify(template, null, 2));
-    console.log(`✅ Plantilla guardada: ${template.name || template.id}`);
+    saveTemplatesToDisk(templatesCache);
     return true;
-  } catch (err) {
-    console.error(`❌ Error al guardar plantilla:`, err.message);
+  } catch (e) {
+    console.error("❌ Error al guardar plantilla:", e);
+    return false;
+  }
+}
+
+function eliminarPlantilla(id) {
+  if (!templatesCache[id]) return false;
+
+  // Evitar que se borren las dos base por accidente
+  const isBase = id === "receipt" || id === "price-tag";
+  if (isBase) {
+    console.warn(`⚠️ No se permite eliminar la plantilla base "${id}"`);
+    return false;
+  }
+
+  delete templatesCache[id];
+  try {
+    saveTemplatesToDisk(templatesCache);
+    return true;
+  } catch (e) {
+    console.error("❌ Error al eliminar plantilla:", e);
     return false;
   }
 }
 
 /**
- * Elimina una plantilla
- * @param {string} templateId - ID de la plantilla a eliminar
- * @returns {boolean} - true si se eliminó correctamente
+ * Valida los datos que llegan a /api/imprimir contra la plantilla seleccionada.
+ * Devuelve { valid: boolean, missingFields: string[], details?: object }
  */
-function eliminarPlantilla(templateId) {
-  const templatePath = path.join(TEMPLATES_DIR, `${templateId}.json`);
+function validarDatosParaPlantilla(templateId, data) {
+  const tpl = obtenerPlantilla(templateId);
+  if (!tpl) {
+    return {
+      valid: false,
+      missingFields: [":templateId inválido"],
+      details: { message: `No existe plantilla con id "${templateId}"` },
+    };
+  }
 
-  if (fs.existsSync(templatePath)) {
-    try {
-      fs.unlinkSync(templatePath);
-      console.log(`✅ Plantilla eliminada: ${templateId}`);
-      return true;
-    } catch (err) {
-      console.error(
-        `❌ Error al eliminar plantilla ${templateId}:`,
-        err.message
-      );
-      return false;
+  const missing = [];
+
+  // Reglas específicas por plantilla (para una validación más útil)
+  if (templateId === "receipt") {
+    // detallePedido: array [{ nombre, cantidad, precio }]
+    if (!Array.isArray(data.detallePedido) || data.detallePedido.length === 0) {
+      missing.push("detallePedido");
+    } else {
+      // Validación básica de cada ítem
+      const invalidLines = [];
+      data.detallePedido.forEach((item, idx) => {
+        if (
+          !item ||
+          typeof item.nombre !== "string" ||
+          item.nombre.trim() === "" ||
+          typeof item.cantidad !== "number" ||
+          isNaN(item.cantidad) ||
+          typeof item.precio !== "number" ||
+          isNaN(item.precio)
+        ) {
+          invalidLines.push(idx);
+        }
+      });
+      if (invalidLines.length > 0) {
+        missing.push(`detallePedido.items(${invalidLines.join(",")})`);
+      }
+    }
+
+    // total
+    if (typeof data.total !== "number" || isNaN(data.total)) {
+      missing.push("total");
+    }
+
+    // metodoPago
+    if (
+      typeof data.metodoPago !== "string" ||
+      data.metodoPago.trim().length === 0
+    ) {
+      missing.push("metodoPago");
+    }
+
+    // telefono
+    if (
+      typeof data.telefono !== "string" ||
+      data.telefono.trim().length === 0
+    ) {
+      missing.push("telefono");
+    }
+  } else if (templateId === "price-tag") {
+    // productName
+    if (
+      typeof data.productName !== "string" ||
+      data.productName.trim().length === 0
+    ) {
+      missing.push("productName");
+    }
+
+    // price
+    if (typeof data.price !== "number" || isNaN(data.price)) {
+      missing.push("price");
+    }
+
+    // header es opcional (batch), no se valida como requerido
+  }
+
+  // Validación genérica en base a requiredFields declarados por la plantilla
+  // (solo para campos simples que no hayamos validado específicamente arriba)
+  const alreadyChecked = new Set([
+    ...(templateId === "receipt"
+      ? ["detallePedido", "total", "metodoPago", "telefono"]
+      : []),
+    ...(templateId === "price-tag" ? ["productName", "price"] : []),
+  ]);
+
+  for (const field of tpl.requiredFields) {
+    if (alreadyChecked.has(field)) continue;
+
+    if (
+      data[field] === undefined ||
+      data[field] === null ||
+      (typeof data[field] === "string" && data[field].trim() === "")
+    ) {
+      // Evitar duplicados si ya fue detectado
+      if (!missing.includes(field)) missing.push(field);
     }
   }
 
-  return false;
-}
-
-/**
- * Valida que los datos proporcionados cumplan con los requisitos de la plantilla
- * @param {string} templateId - ID de la plantilla
- * @param {Object} data - Datos a validar
- * @returns {Object} - { valid: boolean, missingFields: string[] }
- */
-function validarDatosParaPlantilla(templateId, data) {
-  const template = obtenerPlantilla(templateId);
-
-  if (!template) {
-    return { valid: false, error: `Plantilla ${templateId} no encontrada` };
-  }
-
-  const missingFields = [];
-
-  if (template.requiredFields) {
-    template.requiredFields.forEach((field) => {
-      if (
-        !data.hasOwnProperty(field) ||
-        data[field] === undefined ||
-        data[field] === null
-      ) {
-        missingFields.push(field);
-      }
-    });
-  }
-
   return {
-    valid: missingFields.length === 0,
-    missingFields,
-    template,
+    valid: missing.length === 0,
+    missingFields: missing,
   };
 }
-
-/**
- * Procesa datos con una plantilla específica para preparar la impresión
- * @param {string} templateId - ID de la plantilla
- * @param {Object} data - Datos para procesar
- * @returns {Object} - Datos procesados para impresión
- */
-function procesarDatosConPlantilla(templateId, data) {
-  const validacion = validarDatosParaPlantilla(templateId, data);
-
-  if (!validacion.valid) {
-    throw new Error(
-      `Datos inválidos para plantilla ${templateId}. Campos faltantes: ${validacion.missingFields.join(
-        ", "
-      )}`
-    );
-  }
-
-  // Combina los datos con la estructura de la plantilla
-  // Aquí iría la lógica específica para cada tipo de plantilla
-  // Por ahora solo devolvemos los datos tal cual
-  return {
-    ...data,
-    template: validacion.template,
-  };
-}
-
-// Inicializar plantillas predeterminadas
-inicializarPlantillasPredeterminadas();
 
 module.exports = {
   obtenerTodasLasPlantillas,
@@ -236,5 +257,4 @@ module.exports = {
   guardarPlantilla,
   eliminarPlantilla,
   validarDatosParaPlantilla,
-  procesarDatosConPlantilla,
 };

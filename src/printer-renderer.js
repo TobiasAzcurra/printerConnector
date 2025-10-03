@@ -6,14 +6,12 @@ const {
   types: PrinterTypes,
 } = require("node-thermal-printer");
 const fontRenderer = require("./font-renderer");
-const fontCache = require("./font-renderer/cache");
 const textRenderer = require("./font-renderer/text-renderer");
 const templateSystem = require("./templates");
+const { printHeaderLogo, printFooterLogo } = require("./print-logos");
 
 // Ruta para guardar imágenes temporales
 const tempFontImagePath = path.join(__dirname, "..", "temp-font-image.png");
-const logoHeaderPath = path.join(__dirname, "..", "assets", "logo-header.png");
-const logoFooterPath = path.join(__dirname, "..", "assets", "logo-footer.png");
 
 // Función para formatear montos como currency sin decimales
 function formatCurrency(amount) {
@@ -104,21 +102,14 @@ async function imprimirConPlantilla(config, data, templateId = "receipt") {
       return false;
     }
 
-    const template = validacion.template;
     const printer = await inicializarImpresora(config);
-
-    if (!printer) {
-      return false;
-    }
+    if (!printer) return false;
 
     // Verificar si se debe usar fuente personalizada
     const useFontTicket = config.useFontTicket === true;
-    let fontImages = null;
 
-    // Si está activada la fuente personalizada, preparar imágenes
     if (useFontTicket) {
       try {
-        // Obtener info de la fuente
         const fontInfo = fontRenderer.obtenerInfoFuente(config.clienteId);
         if (fontInfo) {
           console.log(
@@ -142,6 +133,7 @@ async function imprimirConPlantilla(config, data, templateId = "receipt") {
       case "receipt":
         await imprimirTicketVenta(printer, data, config, useFontTicket);
         break;
+
       case "price-tag":
         await imprimirEtiquetaPrecio(printer, data, config, useFontTicket);
         break;
@@ -162,23 +154,8 @@ async function imprimirConPlantilla(config, data, templateId = "receipt") {
  * Imprime un ticket de venta (plantilla original)
  */
 async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
-  const sharp = require("sharp");
-  const path = require("path");
-  const fs = require("fs");
-
-  // ENCABEZADO DEL TICKET
-  if (config.useHeaderLogo && fs.existsSync(logoHeaderPath)) {
-    try {
-      console.log("📷 Imprimiendo logo de encabezado...");
-      await printer.printImage(logoHeaderPath);
-    } catch (err) {
-      console.error(
-        "⚠️ No se pudo imprimir el logo de encabezado:",
-        err.message
-      );
-    }
-  }
-
+  // ENCABEZADO DEL TICKET (logo cliente si está habilitado)
+  await printHeaderLogo(printer, config);
   printer.newLine();
 
   // LISTA DE PRODUCTOS
@@ -296,7 +273,6 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
 
   // TOTAL + ICONO
   printer.bold(true);
-  // printer.newLine();
   printer.alignCenter();
 
   if (useFontTicket) {
@@ -335,7 +311,6 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       const textoMeta = await sharp(montoTextoBuffer).metadata();
 
       const gap = 4; // px de separación
-
       const totalWidth = iconMeta.width + gap + textoMeta.width;
       const totalHeight = Math.max(iconMeta.height, textoMeta.height);
 
@@ -405,7 +380,6 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       const textoMeta = await sharp(telefonoTextoBuffer).metadata();
 
       const gap = 4; // px separación
-
       const totalWidth = iconMeta.width + gap + textoMeta.width;
       const totalHeight = Math.max(iconMeta.height, textoMeta.height);
 
@@ -502,24 +476,13 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
     }
   }
 
-  // PIE DE TICKET
+  // PIE DE TICKET (logo cliente si está habilitado)
   printer.newLine();
   printer.alignCenter();
 
-  if (config.useFooterLogo && fs.existsSync(logoFooterPath)) {
-    try {
-      const tempLogoPath = path.join(__dirname, "..", "temp-footer-logo.png");
+  await printFooterLogo(printer, config);
 
-      await sharp(logoFooterPath).resize({ width: 100 }).toFile(tempLogoPath);
-
-      await printer.printImage(tempLogoPath);
-
-      fs.unlinkSync(tempLogoPath);
-    } catch (err) {
-      console.error("⚠️ No se pudo imprimir el logo de pie:", err.message);
-    }
-  }
-
+  // Textos de pie
   if (useFontTicket) {
     try {
       const imagenEmpresa = await textRenderer.renderizarTexto(
@@ -554,40 +517,10 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
  * Imprime una etiqueta de precio para góndola
  */
 async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
-  // ENCABEZADO DEL TICKET
+  // ENCABEZADO DEL TICKET (logo cliente si está habilitado)
   printer.alignCenter();
-  if (config.useHeaderLogo && fs.existsSync(logoHeaderPath)) {
-    try {
-      console.log("📷 Imprimiendo logo de encabezado...");
-      // Crear una versión redimensionada del logo del encabezado
-      const sharp = require("sharp");
-      const tempHeaderLogoPath = path.join(
-        __dirname,
-        "..",
-        "temp-header-logo.png"
-      );
-
-      // Redimensionar a un ancho que sea el doble del footer (200px)
-      await sharp(logoHeaderPath)
-        .resize({ width: 400 }) // El doble del tamaño del footer (100px)
-        .toFile(tempHeaderLogoPath);
-
-      // Imprimir la versión redimensionada
-      await printer.printImage(tempHeaderLogoPath);
-
-      // Eliminar el archivo temporal
-      fs.unlinkSync(tempHeaderLogoPath);
-    } catch (err) {
-      console.error(
-        "⚠️ No se pudo imprimir el logo de encabezado:",
-        err.message
-      );
-    }
-  }
-
+  await printHeaderLogo(printer, config);
   printer.newLine();
-
-  printer.alignCenter();
 
   // Textos de promo - Solo mostrar si existe la propiedad header en el producto
   if (data.header) {
@@ -597,17 +530,17 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
       try {
         const imagenEmpresa = await textRenderer.renderizarTexto(
           config.clienteId,
-          data.header, // Usar el valor real del header en lugar de "-15%"
+          data.header, // valor real del header
           { fontSize: 260, centerText: true, bold: true }
         );
         await imprimirImagenTexto(printer, imagenEmpresa);
       } catch (err) {
         printer.bold(true);
-        printer.println(data.header || "PROMO"); // Usar el valor del header o "PROMO" como fallback
+        printer.println(data.header || "PROMO");
       }
     } else {
       printer.bold(true);
-      printer.println(data.header || "PROMO"); // Usar el valor del header o "PROMO" como fallback
+      printer.println(data.header || "PROMO");
     }
 
     printer.newLine();
@@ -633,32 +566,21 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
 
   if (useFontTicket) {
     try {
-      // Estimar el ancho promedio de un carácter (en píxeles) con el tamaño de fuente dado
-      const caracteresMaxPorLinea = Math.floor(260 / 5); // Estimamos ~10px de ancho por carácter con fontSize 40
+      // Estimar el ancho promedio de un carácter con el tamaño de fuente dado
+      const caracteresMaxPorLinea = Math.floor(260 / 5); // aprox
 
-      // Dividir el texto si es demasiado largo para el ancho del ticket
       if (nombreFormateado.length > caracteresMaxPorLinea) {
-        // Encontrar un buen punto para dividir (un espacio cerca de la mitad)
         const mitad = Math.floor(nombreFormateado.length / 2);
         let puntoCorte = nombreFormateado.lastIndexOf(" ", mitad);
-
-        // Si no hay espacio antes de la mitad, buscar después
-        if (puntoCorte === -1) {
+        if (puntoCorte === -1)
           puntoCorte = nombreFormateado.indexOf(" ", mitad);
-        }
+        if (puntoCorte === -1) puntoCorte = mitad;
 
-        // Si no hay espacios, dividir exactamente a la mitad
-        if (puntoCorte === -1) {
-          puntoCorte = mitad;
-        }
-
-        // Dividir el texto en dos líneas
         const primeraLinea = nombreFormateado.substring(0, puntoCorte);
         const segundaLinea = nombreFormateado.substring(
           puntoCorte + (nombreFormateado[puntoCorte] === " " ? 1 : 0)
         );
 
-        // Imprimir cada línea
         const imgProductLine1 = await textRenderer.renderizarTexto(
           config.clienteId,
           primeraLinea,
@@ -673,7 +595,6 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
         );
         await imprimirImagenTexto(printer, imgProductLine2);
       } else {
-        // El texto cabe en una sola línea
         const imgProduct = await textRenderer.renderizarTexto(
           config.clienteId,
           nombreFormateado,
@@ -693,31 +614,20 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
     // Dividir el texto largo en múltiples líneas
     const caracteresMaxPorLinea = printer.getWidth() || 32;
     if (nombreFormateado.length > caracteresMaxPorLinea) {
-      // Dividir el texto en palabras
       const palabras = nombreFormateado.split(" ");
       let lineaActual = "";
-
-      // Construir líneas respetando el ancho máximo
       for (const palabra of palabras) {
         if (lineaActual.length + 1 + palabra.length > caracteresMaxPorLinea) {
-          // La palabra no cabe en la línea actual, imprimir la línea y comenzar una nueva
           printer.println(lineaActual);
           lineaActual = palabra;
         } else {
-          // La palabra cabe, agregarla a la línea actual
           lineaActual = lineaActual ? `${lineaActual} ${palabra}` : palabra;
         }
       }
-
-      // Imprimir la última línea si quedó algo
-      if (lineaActual) {
-        printer.println(lineaActual);
-      }
+      if (lineaActual) printer.println(lineaActual);
     } else {
-      // El texto cabe en una sola línea
       printer.println(nombreFormateado);
     }
-
     printer.bold(false);
   }
 
@@ -747,31 +657,11 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
     printer.bold(false);
   }
 
-  // PIE DE TICKET
+  // PIE DE TICKET (logo cliente si está habilitado)
   printer.newLine();
   printer.alignCenter();
 
-  // Imprimir logo inferior si existe y está habilitado
-  if (config.useFooterLogo && fs.existsSync(logoFooterPath)) {
-    try {
-      // Crear una versión redimensionada del logo
-      const sharp = require("sharp");
-      const tempLogoPath = path.join(__dirname, "..", "temp-footer-logo.png");
-
-      // Redimensionar a un ancho específico (por ejemplo, 200px de ancho)
-      await sharp(logoFooterPath)
-        .resize({ width: 100 }) // Cambia este valor para ajustar el tamaño
-        .toFile(tempLogoPath);
-
-      // Imprimir la versión redimensionada
-      await printer.printImage(tempLogoPath);
-
-      // Eliminar el archivo temporal
-      fs.unlinkSync(tempLogoPath);
-    } catch (err) {
-      console.error("⚠️ No se pudo imprimir el logo de pie:", err.message);
-    }
-  }
+  await printFooterLogo(printer, config);
 
   // Textos de pie
   if (useFontTicket) {

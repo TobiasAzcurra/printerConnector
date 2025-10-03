@@ -391,7 +391,7 @@
 
         <div class="form-group">
           <label for="printerIP">IP de la Impresora</label>
-          <input id="printerIP" placeholder="192.168.100.200" />
+          <input id="printerIP" placeholder="192.168.0.169" />
           <div class="hint">
             Dirección IP de tu impresora térmica en la red local
           </div>
@@ -659,14 +659,10 @@
 
           <div class="template-fields">
             <h3>Campos Requeridos</h3>
-            <ul id="required-fields">
-              <!-- Se llenará dinámicamente -->
-            </ul>
+            <ul id="required-fields"></ul>
 
             <h3>Campos Opcionales</h3>
-            <ul id="optional-fields">
-              <!-- Se llenará dinámicamente -->
-            </ul>
+            <ul id="optional-fields"></ul>
           </div>
 
           <div class="test-print-section">
@@ -1292,20 +1288,6 @@
               barcode: "7791234567890",
               offerPrice: 1350,
               validUntil: "30/04/2025",
-            };
-
-            return {
-              ...datosComunes,
-              date: new Date().toLocaleDateString(),
-              category: "Alimentos",
-              location: "Depósito Principal",
-              items: [
-                { name: "Hamburguesa Simple", quantity: 25, price: 1100 },
-                { name: "Hamburguesa Completa", quantity: 18, price: 1500 },
-                { name: "Papas Fritas", quantity: 40, price: 500 },
-                { name: "Gaseosa 500ml", quantity: 32, price: 350 },
-                { name: "Postre Helado", quantity: 15, price: 600 },
-              ],
             };
 
           default:

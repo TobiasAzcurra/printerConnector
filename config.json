@@ -1,10 +1,22 @@
 {
-  "clienteId": "DESKTOP-RP27LG8-printer",
-  "printerIP": "192.168.1.50",
+  "clienteId": "cliente-default",
+  "printerIP": "192.168.0.169",
   "printerPort": 9100,
   "businessName": "Mi Negocio",
   "ticketWidth": 48,
   "useHeaderLogo": true,
   "useFooterLogo": true,
-  "useFontTicket": false
+  "useFontTicket": false,
+  "assets": {
+    "logoHeader": {
+      "version": 9,
+      "path": "assets/logos/cliente-default/header.png",
+      "sha256": "edefc42ce6517422a6625946c6346393fb1d194423dbd1b7b444e4a6fb8cbbb0"
+    },
+    "logoFooter": {
+      "version": 9,
+      "path": "assets/logos/cliente-default/footer.png",
+      "sha256": "9150fab5bc466ea696d61e18a9c64b10963a56351ae67f71c9c996a01360b02d"
+    }
+  }
 }

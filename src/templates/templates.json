@@ -1,0 +1,42 @@
+{
+  "receipt": {
+    "id": "receipt",
+    "name": "Ticket de Venta",
+    "description": "Plantilla estándar para tickets de venta",
+    "version": 1,
+    "requiredFields": [
+      "detallePedido",
+      "total",
+      "metodoPago",
+      "telefono"
+    ],
+    "optionalFields": [
+      "aclaraciones",
+      "direccion",
+      "envio",
+      "subTotal",
+      "fecha",
+      "hora",
+      "businessName",
+      "id"
+    ]
+  },
+  "price-tag": {
+    "id": "price-tag",
+    "name": "Etiqueta de Precio",
+    "description": "Para imprimir precios en góndola",
+    "version": 1,
+    "requiredFields": [
+      "productName",
+      "price"
+    ],
+    "optionalFields": [
+      "barcode",
+      "offerPrice",
+      "validUntil",
+      "category",
+      "header",
+      "businessName"
+    ]
+  }
+}

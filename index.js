@@ -1,3 +1,4 @@
+// index.js
 const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
@@ -6,38 +7,31 @@ const {
   printer: ThermalPrinter,
   types: PrinterTypes,
 } = require("node-thermal-printer");
+
 const fontRenderer = require("./src/font-renderer");
 const fontCache = require("./src/font-renderer/cache");
 const textRenderer = require("./src/font-renderer/text-renderer");
 const templateSystem = require("./src/templates");
 const printerRenderer = require("./src/printer-renderer");
+const { printHeaderLogo, printFooterLogo } = require("./src/print-logos");
 
-const configPath = path.join(__dirname, "config.json");
-const tempPrintJobPath = path.join(__dirname, "temp-print-job.json");
-const logoHeaderPath = path.join(__dirname, "assets", "logo-header.png"); // Logo superior
-const logoFooterPath = path.join(__dirname, "assets", "logo-footer.png"); // Logo inferior
-const tempFontImagePath = path.join(__dirname, "temp-font-image.png"); // Ruta para guardar imágenes temporales
+const ROOT_DIR = __dirname;
+const configPath = path.join(ROOT_DIR, "config.json");
+const tempPrintJobPath = path.join(ROOT_DIR, "temp-print-job.json");
+const tempFontImagePath = path.join(ROOT_DIR, "temp-font-image.png");
+
 let config = {};
 let socket = null;
 
-// Función auxiliar para guardar buffer de imagen en archivo temporal e imprimirlo
+/* ==========================
+   Util: imprimir buffer PNG
+   ========================== */
 async function imprimirImagenTexto(printer, imageBuffer) {
   try {
-    // Crear un nombre único para evitar conflictos
-    const tempPath = `${tempFontImagePath.replace(
-      ".png",
-      ""
-    )}-${Date.now()}.png`;
-
-    // Guardar buffer en archivo temporal
-    fs.writeFileSync(tempPath, imageBuffer);
-
-    // Imprimir la imagen desde el archivo
-    await printer.printImage(tempPath);
-
-    // Eliminar el archivo temporal después de usarlo
-    fs.unlinkSync(tempPath);
-
+    const tmp = `${tempFontImagePath.replace(".png", "")}-${Date.now()}.png`;
+    fs.writeFileSync(tmp, imageBuffer);
+    await printer.printImage(tmp);
+    fs.unlinkSync(tmp);
     return true;
   } catch (err) {
     console.error(`Error al imprimir imagen: ${err.message}`);
@@ -45,7 +39,9 @@ async function imprimirImagenTexto(printer, imageBuffer) {
   }
 }
 
-// 🔄 Cargar configuración desde archivo
+/* ==========================
+   Cargar configuración
+   ========================== */
 function cargarConfig() {
   if (!fs.existsSync(configPath)) {
     fs.writeFileSync(
@@ -55,10 +51,12 @@ function cargarConfig() {
           clienteId: "cliente-default",
           printerIP: "",
           printerPort: 9100,
-          useHeaderLogo: true, // Usar logo superior
-          useFooterLogo: true, // Usar logo inferior
-          useFontTicket: false, // Usar fuente personalizada
-          ticketWidth: 48, // Ancho del ticket en caracteres
+          useHeaderLogo: true,
+          useFooterLogo: true,
+          useFontTicket: false,
+          ticketWidth: 48,
+          // estructura para assets versionados
+          assets: {},
         },
         null,
         2
@@ -74,35 +72,45 @@ function cargarConfig() {
     const raw = fs.readFileSync(configPath, "utf8");
     config = JSON.parse(raw);
 
-    // Asegurar que los campos nuevos existan (para retrocompatibilidad)
+    // Defaults/retrocompat
     if (config.useHeaderLogo === undefined) config.useHeaderLogo = true;
     if (config.useFooterLogo === undefined) config.useFooterLogo = true;
     if (config.useFontTicket === undefined) config.useFontTicket = false;
     if (config.ticketWidth === undefined) config.ticketWidth = 48;
-
-    // Retrocompatibilidad con configuración anterior
+    if (!config.assets) config.assets = {};
     if (config.useLogo !== undefined && config.useHeaderLogo === undefined) {
       config.useHeaderLogo = config.useLogo;
     }
 
-    console.log("✅ Config cargada:", config);
+    console.log("✅ Config cargada:", {
+      ...config,
+      // evitar log de objetos grandes (recortar paths)
+      assets: Object.fromEntries(
+        Object.entries(config.assets || {}).map(([k, v]) => [
+          k,
+          { ...v, path: v?.path },
+        ])
+      ),
+    });
   } catch (err) {
     console.error("❌ Error al leer config.json:", err);
     process.exit(1);
   }
 }
 
-// 🧪 Diagnóstico automático de red
+/* ==========================
+   Diagnóstico de red
+   ========================== */
 function diagnosticarRed(ip) {
   console.log("\n🔍 Ejecutando diagnóstico de conexión con la impresora...\n");
-
   const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
   if (!ipRegex.test(ip)) {
     console.log("❌ IP inválida:", ip);
     return;
   }
 
-  exec(`ping -n 2 ${ip}`, (error, stdout, stderr) => {
+  // Windows (-n), en Linux/Mac cambiar a -c
+  exec(`ping -n 2 ${ip}`, (error, stdout) => {
     if (error) {
       console.log("❌ Error al intentar hacer ping:", error.message);
       return;
@@ -115,7 +123,10 @@ function diagnosticarRed(ip) {
       );
     } else if (stdout.includes("tiempo de espera agotado")) {
       console.log("⏱️ La impresora no respondió al ping. ¿Está encendida?");
-    } else if (stdout.includes("Respuesta desde")) {
+    } else if (
+      stdout.includes("Respuesta desde") ||
+      stdout.includes("bytes=")
+    ) {
       console.log("✅ Impresora encontrada en la red 🎉");
     } else {
       console.log("⚠️ Resultado indeterminado. Revisá conexión e IP.");
@@ -123,7 +134,9 @@ function diagnosticarRed(ip) {
   });
 }
 
-// 🚀 Conexión al backend
+/* ==========================
+   Socket backend
+   ========================== */
 function conectarBackend() {
   if (socket) socket.disconnect();
 
@@ -145,7 +158,9 @@ function conectarBackend() {
   socket.on("imprimir", handleImpresion);
 }
 
-// 🖨️ Confirmación impresa
+/* ==========================
+   Impresión de confirmación
+   ========================== */
 async function imprimirConfirmacion() {
   const printer = new ThermalPrinter({
     type: PrinterTypes.EPSON,
@@ -153,82 +168,50 @@ async function imprimirConfirmacion() {
     width: config.ticketWidth || 48,
     removeSpecialCharacters: false,
     lineCharacter: "-",
-    encoding: "utf8", // Añadir codificación explícitamente
+    encoding: "utf8",
   });
 
   const isConnected = await printer.isPrinterConnected();
   console.log("📡 Verificando conexión con impresora:", isConnected);
-
   if (!isConnected) {
     console.log("❌ No se pudo imprimir confirmación (impresora no conectada)");
     return;
   }
 
-  // Imprimir logo superior si existe y está habilitado
-  if (config.useHeaderLogo && fs.existsSync(logoHeaderPath)) {
-    try {
-      console.log("📷 Imprimiendo logo de encabezado...");
-      printer.alignCenter();
-      await printer.printImage(logoHeaderPath);
-      console.log("✅ Logo de encabezado impreso correctamente");
-    } catch (err) {
-      console.error(
-        "⚠️ No se pudo imprimir el logo de encabezado:",
-        err.message
-      );
-    }
-  } else {
-    if (config.useHeaderLogo) {
-      console.log(
-        "⚠️ Logo de encabezado habilitado pero no se encontró archivo en:",
-        logoHeaderPath
-      );
-    }
+  // Logo HEADER (dinámico por cliente, usando /assets/logos/<clienteId>/header.png si existe)
+  try {
+    await printHeaderLogo(printer, config);
+  } catch (e) {
+    console.warn("⚠️ No se pudo imprimir header logo:", e.message);
   }
 
   printer.newLine();
   printer.newLine();
 
-  // Comprobar si se debe usar fuente personalizada para la confirmación
+  // Texto central
   if (config.useFontTicket) {
     try {
       const fontInfo = fontRenderer.obtenerInfoFuente(config.clienteId);
       if (fontInfo) {
-        console.log(
-          `🔤 Usando fuente personalizada: ${
-            fontInfo.fontFamily || fontInfo.fontName
-          }`
-        );
-
-        // Generar texto "Impresora conectada correctamente" con fuente personalizada
         const imagen = await textRenderer.renderizarTexto(
           config.clienteId,
           "Impresora conectada correctamente",
-          {
-            fontSize: 28,
-            centerText: true,
-            backgroundColor: "#FFFFFF",
-          }
+          { fontSize: 28, centerText: true, backgroundColor: "#FFFFFF" }
         );
-
-        // Imprimir la imagen
         printer.alignCenter();
         await imprimirImagenTexto(printer, imagen);
       } else {
-        // Si no hay fuente, usar texto normal
         printer.alignCenter();
         printer.bold(true);
         printer.println("Impresora conectada correctamente");
       }
     } catch (err) {
-      // En caso de error, usar texto normal
       console.error("❌ Error con fuente personalizada:", err.message);
       printer.alignCenter();
       printer.bold(true);
       printer.println("Impresora conectada correctamente");
     }
   } else {
-    // Usar texto normal si no está habilitada la fuente personalizada
     printer.alignCenter();
     printer.bold(true);
     printer.println("Impresora conectada correctamente");
@@ -236,38 +219,24 @@ async function imprimirConfirmacion() {
 
   printer.newLine();
 
-  // Imprimir logo inferior si existe y está habilitado
-  if (config.useFooterLogo && fs.existsSync(logoFooterPath)) {
-    try {
-      console.log("📷 Imprimiendo logo de pie...");
-      printer.alignCenter();
-      await printer.printImage(logoFooterPath);
-      console.log("✅ Logo de pie impreso correctamente");
-    } catch (err) {
-      console.error("⚠️ No se pudo imprimir el logo de pie:", err.message);
-    }
-  } else {
-    if (config.useFooterLogo) {
-      console.log(
-        "⚠️ Logo de pie habilitado pero no se encontró archivo en:",
-        logoFooterPath
-      );
-    }
+  // Logo FOOTER (dinámico por cliente)
+  try {
+    await printFooterLogo(printer, config);
+  } catch (e) {
+    console.warn("⚠️ No se pudo imprimir footer logo:", e.message);
   }
 
+  // Pie "Impulsado por Absolute"
   if (config.useFontTicket) {
     try {
       const fontInfo = fontRenderer.obtenerInfoFuente(config.clienteId);
       if (fontInfo) {
-        // Generar texto "Impulsado por Absolute" con fuente personalizada
-        const imagenImpulsado = await textRenderer.renderizarTexto(
+        const img = await textRenderer.renderizarTexto(
           config.clienteId,
           "Impulsado por Absolute.",
           { fontSize: 28, centerText: true, bold: true }
         );
-
-        // Imprimir la imagen
-        await imprimirImagenTexto(printer, imagenImpulsado);
+        await imprimirImagenTexto(printer, img);
       } else {
         printer.println("Impulsado por Absolute.");
       }
@@ -278,8 +247,8 @@ async function imprimirConfirmacion() {
   } else {
     printer.println("Impulsado por Absolute.");
   }
-  printer.cut();
 
+  printer.cut();
   try {
     console.log("🖨️ Ejecutando impresión de confirmación...");
     await printer.execute();
@@ -289,135 +258,144 @@ async function imprimirConfirmacion() {
   }
 }
 
-// 🔁 Reinicio completo del conector
+/* ==========================
+   Reinicio del conector
+   ========================== */
 async function reiniciarConector() {
   console.log("🔁 Recargando configuración...");
   cargarConfig();
   diagnosticarRed(config.printerIP);
   conectarBackend();
 
-  // Revisar si hay trabajos de impresión pendientes
   const hayTrabajosPendientes = fs.existsSync(tempPrintJobPath);
 
-  // Solo imprimir confirmación si NO hay trabajos pendientes
+  // Solo imprimo confirmación si NO hay jobs pendientes (no ensuciar cola)
   if (!hayTrabajosPendientes) {
     await imprimirConfirmacion();
   }
 
-  // Procesar trabajos pendientes
   checkPendingPrintJobs();
 }
 
-// 🎫 Impresión del pedido recibido
+/* ==========================
+   Handler de impresión
+   ========================== */
 async function handleImpresion(datos) {
   console.log("📥 Trabajo de impresión recibido:", datos.id || "Sin ID");
 
-  // Determinar qué plantilla usar
   const templateId = datos._templateInfo?.id || "receipt";
   console.log(`🖨️ Usando plantilla: ${templateId}`);
 
   try {
-    // Imprimir usando el sistema de plantillas
-    const resultado = await printerRenderer.imprimirConPlantilla(
+    const ok = await printerRenderer.imprimirConPlantilla(
       config,
       datos,
       templateId
     );
-
-    if (resultado) {
-      console.log(`✅ Impresión completada: ${templateId}`);
-    } else {
-      console.error(`❌ Error durante la impresión: ${templateId}`);
-    }
+    if (ok) console.log(`✅ Impresión completada: ${templateId}`);
+    else console.error(`❌ Error durante la impresión: ${templateId}`);
   } catch (err) {
     console.error(`❌ Error al imprimir con plantilla ${templateId}:`, err);
   }
 }
 
-// 🔍 Verificar si hay trabajos pendientes de impresión
+/* ==========================
+   Trabajos pendientes
+   ========================== */
 function checkPendingPrintJobs() {
-  if (fs.existsSync(tempPrintJobPath)) {
+  if (!fs.existsSync(tempPrintJobPath)) return;
+
+  try {
+    console.log("🔍 Encontrado trabajo de impresión pendiente...");
+    const jobContent = fs.readFileSync(tempPrintJobPath, "utf8");
+    const datos = JSON.parse(jobContent);
+
+    if (datos.isBatchPrint && Array.isArray(datos.jobs)) {
+      console.log(
+        `📦 Procesando lote de ${datos.jobs.length} trabajos de impresión`
+      );
+      processBatchJobs(datos.jobs);
+    } else {
+      handleImpresion(datos);
+    }
+
+    fs.unlinkSync(tempPrintJobPath);
+    console.log("✅ Trabajo de impresión pendiente procesado");
+  } catch (err) {
+    console.error("❌ Error al procesar trabajo pendiente:", err);
     try {
-      console.log("🔍 Encontrado trabajo de impresión pendiente...");
-      const jobContent = fs.readFileSync(tempPrintJobPath, "utf8");
-      const datos = JSON.parse(jobContent);
-
-      // Verificar si es un trabajo por lotes
-      if (datos.isBatchPrint && Array.isArray(datos.jobs)) {
-        console.log(
-          `📦 Procesando lote de ${datos.jobs.length} trabajos de impresión`
-        );
-
-        // Procesar cada trabajo en secuencia
-        processBatchJobs(datos.jobs);
-      } else {
-        // Procesamos usando el manejador para un solo trabajo
-        handleImpresion(datos);
-      }
-
-      // Eliminamos el archivo temporal
       fs.unlinkSync(tempPrintJobPath);
-      console.log("✅ Trabajo de impresión pendiente procesado");
-    } catch (err) {
-      console.error("❌ Error al procesar trabajo pendiente:", err);
-      // Si hay error, intentamos eliminar el archivo de todas formas
-      try {
-        fs.unlinkSync(tempPrintJobPath);
-      } catch (e) {
-        console.error("No se pudo eliminar el archivo temporal:", e);
-      }
+    } catch (e) {
+      console.error("No se pudo eliminar el archivo temporal:", e);
     }
   }
 }
 
-// Función para procesar trabajos por lotes de forma secuencial
 async function processBatchJobs(jobs) {
   for (let i = 0; i < jobs.length; i++) {
     const job = jobs[i];
     console.log(`🖨️ Procesando trabajo ${i + 1} de ${jobs.length}`);
-
     try {
       await handleImpresion(job);
-      // Pequeña pausa entre impresiones para evitar sobrecarga
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((r) => setTimeout(r, 500));
     } catch (err) {
-      console.error(
-        `❌ Error al procesar trabajo ${i + 1} de ${jobs.length}:`,
-        err
-      );
+      console.error(`❌ Error en trabajo ${i + 1}:`, err);
     }
   }
   console.log(`✅ Lote de ${jobs.length} trabajos completado`);
 }
 
-// 👀 Watcher de cambios en config.json
+/* ==========================
+   Watcher de config
+   ========================== */
 fs.watchFile(configPath, () => {
-  console.log("📄 Config.json modificado. Recargando...");
+  console.log("📄 config.json modificado. Recargando...");
   reiniciarConector();
 });
 
-// Crear carpetas necesarias si no existen
+/* ==========================
+   Estructura de directorios
+   ========================== */
 function crearEstructuraDirectorios() {
-  const assetsDir = path.join(__dirname, "assets");
+  const assetsDir = path.join(ROOT_DIR, "assets");
   const fontsDir = path.join(assetsDir, "fonts");
   const fontsCacheDir = path.join(fontsDir, "cache");
+  const logosDir = path.join(assetsDir, "logos");
 
   if (!fs.existsSync(assetsDir)) {
     fs.mkdirSync(assetsDir, { recursive: true });
     console.log("📁 Carpeta de assets creada");
   }
-
   if (!fs.existsSync(fontsDir)) {
     fs.mkdirSync(fontsDir, { recursive: true });
     console.log("📁 Carpeta de fuentes creada");
   }
-
   if (!fs.existsSync(fontsCacheDir)) {
     fs.mkdirSync(fontsCacheDir, { recursive: true });
     console.log("📁 Carpeta de caché de fuentes creada");
   }
+  if (!fs.existsSync(logosDir)) {
+    fs.mkdirSync(logosDir, { recursive: true });
+    console.log("📁 Carpeta de logos creada");
+  }
+
+  // Crear subcarpetas por cliente si ya hay clienteId en config
+  try {
+    if (fs.existsSync(configPath)) {
+      const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const clienteId = (cfg.clienteId || "cliente-default").toString();
+      const logosCliente = path.join(logosDir, clienteId);
+      const fontsCliente = path.join(fontsDir, clienteId);
+      if (!fs.existsSync(logosCliente))
+        fs.mkdirSync(logosCliente, { recursive: true });
+      if (!fs.existsSync(fontsCliente))
+        fs.mkdirSync(fontsCliente, { recursive: true });
+    }
+  } catch {}
 }
 
-// ▶️ Iniciar el conector
+/* ==========================
+   Run
+   ========================== */
 crearEstructuraDirectorios();
 reiniciarConector();
