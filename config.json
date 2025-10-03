@@ -1,6 +1,6 @@
 {
   "clienteId": "cliente-default",
-  "printerIP": "192.168.0.169",
+  "printerIP": "192.168.100.169",
   "printerPort": 9100,
   "businessName": "Mi Negocio",
   "ticketWidth": 48,
@@ -9,17 +9,17 @@
   "useFontTicket": true,
   "assets": {
     "logoHeader": {
-      "version": 17,
+      "version": 18,
       "path": "assets/logos/cliente-default/header.png",
       "sha256": "edefc42ce6517422a6625946c6346393fb1d194423dbd1b7b444e4a6fb8cbbb0"
     },
     "logoFooter": {
-      "version": 13,
+      "version": 14,
       "path": "assets/logos/cliente-default/footer.png",
       "sha256": "f898b61c5b3b97add9600e421accc60ccaaf94654a44e87a646d2e281ba89232"
     },
     "font": {
-      "version": 8,
+      "version": 9,
       "path": "assets/fonts/cliente-default/font.ttf",
       "family": "Coolvetica Bk",
       "sha256": "3c26d189f7ac36ed7b6965652e6ee93b4696b34725ccc48f80a951aeaca41a0d"
