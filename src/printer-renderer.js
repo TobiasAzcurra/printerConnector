@@ -562,7 +562,10 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
 
   // NOTAS DEL PEDIDO (orderNotes) - SIEMPRE SE MUESTRA SI EXISTEN
   if (pedido.aclaraciones && pedido.aclaraciones.trim()) {
-    printer.newLine();
+    console.log("🔍 DEBUG aclaraciones recibidas:");
+    console.log("Texto raw:", JSON.stringify(pedido.aclaraciones));
+    console.log("Tiene \\n?:", pedido.aclaraciones.includes("\n"));
+    console.log("Longitud:", pedido.aclaraciones.length);
     if (useFontTicket) {
       try {
         const sharp = require("sharp");
