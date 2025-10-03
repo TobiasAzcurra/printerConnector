@@ -223,58 +223,58 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
   }
 
   // SUBTOTAL, ENVÍO Y DESCUENTOS
-  printer.alignRight();
+  // printer.alignRight();
 
-  if (pedido.subTotal && pedido.subTotal !== pedido.total) {
-    if (useFontTicket) {
-      try {
-        const imagenSubtotal = await textRenderer.renderizarTexto(
-          config.clienteId,
-          `SUBTOTAL: ${formatCurrency(pedido.subTotal)}`,
-          { fontSize: 28, centerText: false }
-        );
-        await imprimirImagenTexto(printer, imagenSubtotal);
-      } catch (err) {
-        printer.println(`SUBTOTAL: ${formatCurrency(pedido.subTotal)}`);
-      }
-    } else {
-      printer.println(`SUBTOTAL: ${formatCurrency(pedido.subTotal)}`);
-    }
-  }
+  // if (pedido.subTotal && pedido.subTotal !== pedido.total) {
+  //   if (useFontTicket) {
+  //     try {
+  //       const imagenSubtotal = await textRenderer.renderizarTexto(
+  //         config.clienteId,
+  //         `SUBTOTAL: ${formatCurrency(pedido.subTotal)}`,
+  //         { fontSize: 28, centerText: false }
+  //       );
+  //       await imprimirImagenTexto(printer, imagenSubtotal);
+  //     } catch (err) {
+  //       printer.println(`SUBTOTAL: ${formatCurrency(pedido.subTotal)}`);
+  //     }
+  //   } else {
+  //     printer.println(`SUBTOTAL: ${formatCurrency(pedido.subTotal)}`);
+  //   }
+  // }
 
-  if (pedido.descuentos && pedido.descuentos > 0) {
-    if (useFontTicket) {
-      try {
-        const imagenDescuento = await textRenderer.renderizarTexto(
-          config.clienteId,
-          `DESCUENTOS: -${formatCurrency(pedido.descuentos)}`,
-          { fontSize: 28, centerText: false }
-        );
-        await imprimirImagenTexto(printer, imagenDescuento);
-      } catch (err) {
-        printer.println(`DESCUENTOS: -${formatCurrency(pedido.descuentos)}`);
-      }
-    } else {
-      printer.println(`DESCUENTOS: -${formatCurrency(pedido.descuentos)}`);
-    }
-  }
+  // if (pedido.descuentos && pedido.descuentos > 0) {
+  //   if (useFontTicket) {
+  //     try {
+  //       const imagenDescuento = await textRenderer.renderizarTexto(
+  //         config.clienteId,
+  //         `DESCUENTOS: -${formatCurrency(pedido.descuentos)}`,
+  //         { fontSize: 28, centerText: false }
+  //       );
+  //       await imprimirImagenTexto(printer, imagenDescuento);
+  //     } catch (err) {
+  //       printer.println(`DESCUENTOS: -${formatCurrency(pedido.descuentos)}`);
+  //     }
+  //   } else {
+  //     printer.println(`DESCUENTOS: -${formatCurrency(pedido.descuentos)}`);
+  //   }
+  // }
 
-  if (pedido.envio && pedido.envio > 0) {
-    if (useFontTicket) {
-      try {
-        const imagenEnvio = await textRenderer.renderizarTexto(
-          config.clienteId,
-          `ENVÍO: ${formatCurrency(pedido.envio)}`,
-          { fontSize: 28, centerText: false }
-        );
-        await imprimirImagenTexto(printer, imagenEnvio);
-      } catch (err) {
-        printer.println(`ENVÍO: ${formatCurrency(pedido.envio)}`);
-      }
-    } else {
-      printer.println(`ENVÍO: ${formatCurrency(pedido.envio)}`);
-    }
-  }
+  // if (pedido.envio && pedido.envio > 0) {
+  //   if (useFontTicket) {
+  //     try {
+  //       const imagenEnvio = await textRenderer.renderizarTexto(
+  //         config.clienteId,
+  //         `ENVÍO: ${formatCurrency(pedido.envio)}`,
+  //         { fontSize: 28, centerText: false }
+  //       );
+  //       await imprimirImagenTexto(printer, imagenEnvio);
+  //     } catch (err) {
+  //       printer.println(`ENVÍO: ${formatCurrency(pedido.envio)}`);
+  //     }
+  //   } else {
+  //     printer.println(`ENVÍO: ${formatCurrency(pedido.envio)}`);
+  //   }
+  // }
 
   // TOTAL + ICONO
   printer.bold(true);
