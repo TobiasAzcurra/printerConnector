@@ -1,12 +1,9 @@
 // src/templates/index.js
-// Sistema de plantillas y validación de datos
-
 const fs = require("fs");
 const path = require("path");
 
 const TEMPLATES_PATH = path.join(__dirname, "templates.json");
 
-// Plantillas por defecto (se mezclan/crean en disco si no existe el archivo)
 const DEFAULT_TEMPLATES = {
   receipt: {
     id: "receipt",
@@ -17,8 +14,10 @@ const DEFAULT_TEMPLATES = {
     optionalFields: [
       "aclaraciones",
       "direccion",
+      "deliveryNotes",
       "envio",
       "subTotal",
+      "descuentos",
       "fecha",
       "hora",
       "businessName",
@@ -42,10 +41,6 @@ const DEFAULT_TEMPLATES = {
   },
 };
 
-/**
- * Lee el archivo de plantillas si existe, de lo contrario crea uno con los defaults.
- * Además asegura retrocompatibilidad (campos mínimos por plantilla).
- */
 function loadTemplatesFromDisk() {
   let data = {};
   if (fs.existsSync(TEMPLATES_PATH)) {
@@ -59,15 +54,12 @@ function loadTemplatesFromDisk() {
     }
   }
 
-  // Mezclar con defaults sin pisar personalizaciones existentes
   const merged = { ...DEFAULT_TEMPLATES, ...data };
 
-  // Asegurar campos obligatorios en cada plantilla
   for (const [id, tpl] of Object.entries(merged)) {
     merged[id] = ensureTemplateShape(id, tpl);
   }
 
-  // Guardar si no existía o estaba corrupto
   saveTemplatesToDisk(merged);
   return merged;
 }
@@ -92,15 +84,9 @@ function ensureTemplateShape(id, tpl) {
   };
 }
 
-// Estado en memoria (se inicializa al requerir el módulo)
 let templatesCache = loadTemplatesFromDisk();
 
-/**
- * API pública
- */
-
 function obtenerTodasLasPlantillas() {
-  // Devolver copia inmutable
   return JSON.parse(JSON.stringify(templatesCache));
 }
 
@@ -109,7 +95,6 @@ function obtenerPlantilla(id) {
 }
 
 function guardarPlantilla(template) {
-  // Validaciones mínimas
   if (!template || !template.id) return false;
 
   const normalized = ensureTemplateShape(template.id, template);
@@ -127,7 +112,6 @@ function guardarPlantilla(template) {
 function eliminarPlantilla(id) {
   if (!templatesCache[id]) return false;
 
-  // Evitar que se borren las dos base por accidente
   const isBase = id === "receipt" || id === "price-tag";
   if (isBase) {
     console.warn(`⚠️ No se permite eliminar la plantilla base "${id}"`);
@@ -144,10 +128,6 @@ function eliminarPlantilla(id) {
   }
 }
 
-/**
- * Valida los datos que llegan a /api/imprimir contra la plantilla seleccionada.
- * Devuelve { valid: boolean, missingFields: string[], details?: object }
- */
 function validarDatosParaPlantilla(templateId, data) {
   const tpl = obtenerPlantilla(templateId);
   if (!tpl) {
@@ -160,13 +140,10 @@ function validarDatosParaPlantilla(templateId, data) {
 
   const missing = [];
 
-  // Reglas específicas por plantilla (para una validación más útil)
   if (templateId === "receipt") {
-    // detallePedido: array [{ nombre, cantidad, precio }]
     if (!Array.isArray(data.detallePedido) || data.detallePedido.length === 0) {
       missing.push("detallePedido");
     } else {
-      // Validación básica de cada ítem
       const invalidLines = [];
       data.detallePedido.forEach((item, idx) => {
         if (
@@ -186,12 +163,10 @@ function validarDatosParaPlantilla(templateId, data) {
       }
     }
 
-    // total
     if (typeof data.total !== "number" || isNaN(data.total)) {
       missing.push("total");
     }
 
-    // metodoPago
     if (
       typeof data.metodoPago !== "string" ||
       data.metodoPago.trim().length === 0
@@ -199,7 +174,6 @@ function validarDatosParaPlantilla(templateId, data) {
       missing.push("metodoPago");
     }
 
-    // telefono
     if (
       typeof data.telefono !== "string" ||
       data.telefono.trim().length === 0
@@ -207,7 +181,6 @@ function validarDatosParaPlantilla(templateId, data) {
       missing.push("telefono");
     }
   } else if (templateId === "price-tag") {
-    // productName
     if (
       typeof data.productName !== "string" ||
       data.productName.trim().length === 0
@@ -215,16 +188,11 @@ function validarDatosParaPlantilla(templateId, data) {
       missing.push("productName");
     }
 
-    // price
     if (typeof data.price !== "number" || isNaN(data.price)) {
       missing.push("price");
     }
-
-    // header es opcional (batch), no se valida como requerido
   }
 
-  // Validación genérica en base a requiredFields declarados por la plantilla
-  // (solo para campos simples que no hayamos validado específicamente arriba)
   const alreadyChecked = new Set([
     ...(templateId === "receipt"
       ? ["detallePedido", "total", "metodoPago", "telefono"]
@@ -240,7 +208,6 @@ function validarDatosParaPlantilla(templateId, data) {
       data[field] === null ||
       (typeof data[field] === "string" && data[field].trim() === "")
     ) {
-      // Evitar duplicados si ya fue detectado
       if (!missing.includes(field)) missing.push(field);
     }
   }

@@ -6,17 +6,23 @@
   "ticketWidth": 48,
   "useHeaderLogo": true,
   "useFooterLogo": true,
-  "useFontTicket": false,
+  "useFontTicket": true,
   "assets": {
     "logoHeader": {
-      "version": 9,
+      "version": 11,
       "path": "assets/logos/cliente-default/header.png",
       "sha256": "edefc42ce6517422a6625946c6346393fb1d194423dbd1b7b444e4a6fb8cbbb0"
     },
     "logoFooter": {
-      "version": 9,
+      "version": 11,
       "path": "assets/logos/cliente-default/footer.png",
       "sha256": "9150fab5bc466ea696d61e18a9c64b10963a56351ae67f71c9c996a01360b02d"
+    },
+    "font": {
+      "version": 2,
+      "path": "assets/fonts/cliente-default/font.ttf",
+      "family": "Coolvetica Bk",
+      "sha256": "3c26d189f7ac36ed7b6965652e6ee93b4696b34725ccc48f80a951aeaca41a0d"
     }
   }
 }

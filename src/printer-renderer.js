@@ -29,21 +29,13 @@ function formatCurrency(amount) {
  */
 async function imprimirImagenTexto(printer, imageBuffer) {
   try {
-    // Crear un nombre único para evitar conflictos
     const tempPath = `${tempFontImagePath.replace(
       ".png",
       ""
     )}-${Date.now()}.png`;
-
-    // Guardar buffer en archivo temporal
     fs.writeFileSync(tempPath, imageBuffer);
-
-    // Imprimir la imagen desde el archivo
     await printer.printImage(tempPath);
-
-    // Eliminar el archivo temporal después de usarlo
     fs.unlinkSync(tempPath);
-
     return true;
   } catch (err) {
     console.error(`Error al imprimir imagen: ${err.message}`);
@@ -88,7 +80,6 @@ async function imprimirConPlantilla(config, data, templateId = "receipt") {
   console.log(`📝 Imprimiendo con plantilla: ${templateId}`);
 
   try {
-    // Validar datos con la plantilla
     const validacion = templateSystem.validarDatosParaPlantilla(
       templateId,
       data
@@ -105,7 +96,6 @@ async function imprimirConPlantilla(config, data, templateId = "receipt") {
     const printer = await inicializarImpresora(config);
     if (!printer) return false;
 
-    // Verificar si se debe usar fuente personalizada
     const useFontTicket = config.useFontTicket === true;
 
     if (useFontTicket) {
@@ -128,7 +118,6 @@ async function imprimirConPlantilla(config, data, templateId = "receipt") {
       }
     }
 
-    // Renderizar según el tipo de plantilla
     switch (templateId) {
       case "receipt":
         await imprimirTicketVenta(printer, data, config, useFontTicket);
@@ -166,7 +155,6 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
         const cantidad = item.quantity || item.cantidad || 1;
         const precio = item.price || item.precio || 0;
 
-        // Capitalizar: Primera letra mayúscula, resto minúscula
         const nombreFormateado =
           nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase();
 
@@ -234,7 +222,7 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
     printer.newLine();
   }
 
-  // SUBTOTAL y ENVÍO
+  // SUBTOTAL, ENVÍO Y DESCUENTOS
   printer.alignRight();
 
   if (pedido.subTotal && pedido.subTotal !== pedido.total) {
@@ -242,15 +230,32 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       try {
         const imagenSubtotal = await textRenderer.renderizarTexto(
           config.clienteId,
-          `SUBTOTAL: $${pedido.subTotal.toFixed(0)}`,
+          `SUBTOTAL: ${formatCurrency(pedido.subTotal)}`,
           { fontSize: 28, centerText: false }
         );
         await imprimirImagenTexto(printer, imagenSubtotal);
       } catch (err) {
-        printer.println(`SUBTOTAL: $${pedido.subTotal.toFixed(0)}`);
+        printer.println(`SUBTOTAL: ${formatCurrency(pedido.subTotal)}`);
       }
     } else {
-      printer.println(`SUBTOTAL: $${pedido.subTotal.toFixed(0)}`);
+      printer.println(`SUBTOTAL: ${formatCurrency(pedido.subTotal)}`);
+    }
+  }
+
+  if (pedido.descuentos && pedido.descuentos > 0) {
+    if (useFontTicket) {
+      try {
+        const imagenDescuento = await textRenderer.renderizarTexto(
+          config.clienteId,
+          `DESCUENTOS: -${formatCurrency(pedido.descuentos)}`,
+          { fontSize: 28, centerText: false }
+        );
+        await imprimirImagenTexto(printer, imagenDescuento);
+      } catch (err) {
+        printer.println(`DESCUENTOS: -${formatCurrency(pedido.descuentos)}`);
+      }
+    } else {
+      printer.println(`DESCUENTOS: -${formatCurrency(pedido.descuentos)}`);
     }
   }
 
@@ -259,15 +264,15 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       try {
         const imagenEnvio = await textRenderer.renderizarTexto(
           config.clienteId,
-          `ENVÍO: $${pedido.envio.toFixed(0)}`,
+          `ENVÍO: ${formatCurrency(pedido.envio)}`,
           { fontSize: 28, centerText: false }
         );
         await imprimirImagenTexto(printer, imagenEnvio);
       } catch (err) {
-        printer.println(`ENVÍO: $${pedido.envio.toFixed(0)}`);
+        printer.println(`ENVÍO: ${formatCurrency(pedido.envio)}`);
       }
     } else {
-      printer.println(`ENVÍO: $${pedido.envio.toFixed(0)}`);
+      printer.println(`ENVÍO: ${formatCurrency(pedido.envio)}`);
     }
   }
 
@@ -288,14 +293,11 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       `;
 
       const svgBuffer = Buffer.from(svgTotalIcon);
-
-      // Crear el ícono como PNG
       const iconBuffer = await sharp(svgBuffer)
         .png()
         .resize({ width: 32, height: 32 })
         .toBuffer();
 
-      // Formatear el monto total
       const montoYMetodo = `${formatCurrency(pedido.total)} en ${
         pedido.metodoPago
       }`;
@@ -306,15 +308,13 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
         { fontSize: 28, centerText: false, bold: true }
       );
 
-      // Obtener metadatos de tamaño
       const iconMeta = await sharp(iconBuffer).metadata();
       const textoMeta = await sharp(montoTextoBuffer).metadata();
 
-      const gap = 4; // px de separación
+      const gap = 4;
       const totalWidth = iconMeta.width + gap + textoMeta.width;
       const totalHeight = Math.max(iconMeta.height, textoMeta.height);
 
-      // Crear el canvas y componer todo
       const combinedBuffer = await sharp({
         create: {
           width: totalWidth,
@@ -361,29 +361,24 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       `;
 
       const svgBuffer = Buffer.from(svgClienteIcon);
-
-      // Crear ícono cliente
       const iconBuffer = await sharp(svgBuffer)
         .png()
         .resize({ width: 32, height: 32 })
         .toBuffer();
 
-      // Crear texto del teléfono
       const telefonoTextoBuffer = await textRenderer.renderizarTexto(
         config.clienteId,
         pedido.telefono,
         { fontSize: 28, centerText: false }
       );
 
-      // Obtener tamaños
       const iconMeta = await sharp(iconBuffer).metadata();
       const textoMeta = await sharp(telefonoTextoBuffer).metadata();
 
-      const gap = 4; // px separación
+      const gap = 4;
       const totalWidth = iconMeta.width + gap + textoMeta.width;
       const totalHeight = Math.max(iconMeta.height, textoMeta.height);
 
-      // Combinar ícono + teléfono
       const combinedBuffer = await sharp({
         create: {
           width: totalWidth,
@@ -414,14 +409,14 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
     }
   } else {
     printer.println(
-      `$${pedido.total.toFixed(0)} en ${pedido.metodoPago} para el cliente: ${
-        pedido.telefono
-      }`
+      `${formatCurrency(pedido.total)} en ${
+        pedido.metodoPago
+      } para el cliente: ${pedido.telefono}`
     );
   }
 
-  // DIRECCIÓN PARA DELIVERY
-  if (pedido.direccion) {
+  // DIRECCIÓN / TIPO DE ENTREGA
+  if (pedido.direccion && pedido.direccion.trim()) {
     printer.newLine();
     printer.drawLine();
 
@@ -429,7 +424,7 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       try {
         const imagenDireccionTitulo = await textRenderer.renderizarTexto(
           config.clienteId,
-          "DIRECCIÓN:",
+          "ENTREGA:",
           { fontSize: 28, centerText: false, bold: true }
         );
         await imprimirImagenTexto(printer, imagenDireccionTitulo);
@@ -441,20 +436,49 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
         );
         await imprimirImagenTexto(printer, imagenDireccion);
       } catch (err) {
-        printer.println("DIRECCIÓN:");
+        printer.println("ENTREGA:");
         printer.println(pedido.direccion);
       }
     } else {
-      printer.println("DIRECCIÓN:");
+      printer.println("ENTREGA:");
       printer.println(pedido.direccion);
     }
 
-    if (pedido.aclaraciones) {
+    // NOTAS DE DELIVERY
+    if (pedido.deliveryNotes && pedido.deliveryNotes.trim()) {
+      printer.newLine();
+      if (useFontTicket) {
+        try {
+          const imagenNotasTitulo = await textRenderer.renderizarTexto(
+            config.clienteId,
+            "NOTAS DE ENTREGA:",
+            { fontSize: 28, centerText: false, bold: true }
+          );
+          await imprimirImagenTexto(printer, imagenNotasTitulo);
+          const imagenNotas = await textRenderer.renderizarTexto(
+            config.clienteId,
+            pedido.deliveryNotes,
+            { fontSize: 28, centerText: false }
+          );
+          await imprimirImagenTexto(printer, imagenNotas);
+        } catch (err) {
+          printer.println("NOTAS DE ENTREGA:");
+          printer.println(pedido.deliveryNotes);
+        }
+      } else {
+        printer.println("NOTAS DE ENTREGA:");
+        printer.println(pedido.deliveryNotes);
+      }
+    }
+
+    // NOTAS DEL PEDIDO (orderNotes)
+    if (pedido.aclaraciones && pedido.aclaraciones.trim()) {
+      printer.newLine();
       if (useFontTicket) {
         try {
           const imagenRefTitulo = await textRenderer.renderizarTexto(
             config.clienteId,
-            "REFERENCIA:",
+            "NOTAS DEL PEDIDO:",
             { fontSize: 28, centerText: false, bold: true }
           );
           await imprimirImagenTexto(printer, imagenRefTitulo);
@@ -466,11 +490,11 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
           );
           await imprimirImagenTexto(printer, imagenRef);
         } catch (err) {
-          printer.println("REFERENCIA:");
+          printer.println("NOTAS DEL PEDIDO:");
           printer.println(pedido.aclaraciones);
         }
       } else {
-        printer.println("REFERENCIA:");
+        printer.println("NOTAS DEL PEDIDO:");
         printer.println(pedido.aclaraciones);
       }
     }
@@ -517,12 +541,10 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
  * Imprime una etiqueta de precio para góndola
  */
 async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
-  // ENCABEZADO DEL TICKET (logo cliente si está habilitado)
   printer.alignCenter();
   await printHeaderLogo(printer, config);
   printer.newLine();
 
-  // Textos de promo - Solo mostrar si existe la propiedad header en el producto
   if (data.header) {
     printer.alignCenter();
 
@@ -530,7 +552,7 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
       try {
         const imagenEmpresa = await textRenderer.renderizarTexto(
           config.clienteId,
-          data.header, // valor real del header
+          data.header,
           { fontSize: 260, centerText: true, bold: true }
         );
         await imprimirImagenTexto(printer, imagenEmpresa);
@@ -546,10 +568,9 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
     printer.newLine();
     printer.newLine();
     printer.newLine();
-    // Añadir línea continua centrada de un tercio del ancho
     printer.alignCenter();
-    const fullWidth = printer.getWidth() || 30; // Ancho predeterminado si no está disponible
-    const lineWidth = Math.floor(fullWidth / 3); // Un tercio del ancho
+    const fullWidth = printer.getWidth() || 30;
+    const lineWidth = Math.floor(fullWidth / 3);
     const continuousLine = "_".repeat(lineWidth);
     printer.println(continuousLine);
     printer.newLine();
@@ -558,7 +579,6 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
     printer.alignCenter();
   }
 
-  // Nombre del producto - con manejo de líneas múltiples
   let nombreProducto = data.productName || "Producto sin nombre";
   const nombreFormateado =
     nombreProducto.charAt(0).toUpperCase() +
@@ -566,8 +586,7 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
 
   if (useFontTicket) {
     try {
-      // Estimar el ancho promedio de un carácter con el tamaño de fuente dado
-      const caracteresMaxPorLinea = Math.floor(260 / 5); // aprox
+      const caracteresMaxPorLinea = Math.floor(260 / 5);
 
       if (nombreFormateado.length > caracteresMaxPorLinea) {
         const mitad = Math.floor(nombreFormateado.length / 2);
@@ -608,10 +627,8 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
       printer.bold(false);
     }
   } else {
-    // Para impresión sin fuente personalizada
     printer.bold(true);
 
-    // Dividir el texto largo en múltiples líneas
     const caracteresMaxPorLinea = printer.getWidth() || 32;
     if (nombreFormateado.length > caracteresMaxPorLinea) {
       const palabras = nombreFormateado.split(" ");
@@ -633,7 +650,6 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
 
   printer.newLine();
 
-  // Precio (en grande)
   if (useFontTicket) {
     try {
       const imgPrice = await textRenderer.renderizarTexto(
@@ -657,13 +673,11 @@ async function imprimirEtiquetaPrecio(printer, data, config, useFontTicket) {
     printer.bold(false);
   }
 
-  // PIE DE TICKET (logo cliente si está habilitado)
   printer.newLine();
   printer.alignCenter();
 
   await printFooterLogo(printer, config);
 
-  // Textos de pie
   if (useFontTicket) {
     try {
       const imagenEmpresa = await textRenderer.renderizarTexto(
