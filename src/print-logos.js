@@ -45,7 +45,9 @@ async function printHeaderLogo(printer, config) {
   try {
     // tamaño generoso para encabezado
     const tmp = path.join(ROOT_DIR, `tmp-header-${Date.now()}.png`);
-    await sharp(p).resize({ width: 600, fit: "inside" }).png().toFile(tmp);
+    printer.alignCenter();
+
+    await sharp(p).resize({ width: 400, fit: "inside" }).png().toFile(tmp);
     printer.alignCenter();
     await printer.printImage(tmp);
     fs.unlinkSync(tmp);

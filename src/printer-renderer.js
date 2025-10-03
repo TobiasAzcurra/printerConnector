@@ -629,6 +629,8 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
 
   await printFooterLogo(printer, config);
 
+  printer.newLine();
+
   // Textos de pie
   if (useFontTicket) {
     try {
