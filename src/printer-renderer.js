@@ -153,14 +153,11 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       for (const item of pedido.detallePedido) {
         let nombre = item.name || item.nombre || "Producto sin nombre";
         const cantidad = item.quantity || item.cantidad || 1;
-        const precio = item.price || item.precio || 0;
 
         const nombreFormateado =
           nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase();
 
-        const textoProducto = `${cantidad}x ${nombreFormateado}: ${formatCurrency(
-          precio * cantidad
-        )}`;
+        const textoProducto = `${cantidad}x ${nombreFormateado}`;
 
         try {
           printer.alignCenter();
@@ -174,6 +171,20 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
 
           await imprimirImagenTexto(printer, imagenProducto);
 
+          // MODIFIERS
+          if (
+            item.modifiers &&
+            typeof item.modifiers === "string" &&
+            item.modifiers.trim()
+          ) {
+            const imagenModifiers = await textRenderer.renderizarTexto(
+              config.clienteId,
+              item.modifiers,
+              { fontSize: 24, centerText: true }
+            );
+            await imprimirImagenTexto(printer, imagenModifiers);
+          }
+
           if (item.aclaraciones) {
             const imagenAclaracion = await textRenderer.renderizarTexto(
               config.clienteId,
@@ -186,11 +197,16 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
           console.error(`❌ Error al imprimir producto:`, err.message);
           printer.alignCenter();
           printer.bold(true);
-          printer.println(
-            `${cantidad}x ${nombreFormateado}: ${formatCurrency(
-              precio * cantidad
-            )}`
-          );
+          printer.println(`${cantidad}x ${nombreFormateado}`);
+
+          if (
+            item.modifiers &&
+            typeof item.modifiers === "string" &&
+            item.modifiers.trim()
+          ) {
+            printer.println(item.modifiers);
+          }
+
           if (item.aclaraciones) {
             printer.println(`   ${item.aclaraciones}`);
           }
@@ -200,19 +216,22 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
       for (const item of pedido.detallePedido) {
         let nombre = item.name || item.nombre || "Producto sin nombre";
         const cantidad = item.quantity || item.cantidad || 1;
-        const precio = item.price || item.precio || 0;
 
         const nombreFormateado =
           nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase();
 
         printer.alignCenter();
         printer.bold(true);
-        printer.println(
-          `${cantidad}x ${nombreFormateado}: ${formatCurrency(
-            precio * cantidad
-          )}`
-        );
+        printer.println(`${cantidad}x ${nombreFormateado}`);
         printer.bold(false);
+
+        if (
+          item.modifiers &&
+          typeof item.modifiers === "string" &&
+          item.modifiers.trim()
+        ) {
+          printer.println(item.modifiers);
+        }
 
         if (item.aclaraciones) {
           printer.println(`   ${item.aclaraciones}`);
@@ -222,61 +241,279 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
     printer.newLine();
   }
 
-  // SUBTOTAL, ENVÍO Y DESCUENTOS
-  // printer.alignRight();
+  // 1. HORA DEL PEDIDO
+  if (pedido.hora && pedido.hora.trim()) {
+    if (useFontTicket) {
+      try {
+        const sharp = require("sharp");
 
-  // if (pedido.subTotal && pedido.subTotal !== pedido.total) {
-  //   if (useFontTicket) {
-  //     try {
-  //       const imagenSubtotal = await textRenderer.renderizarTexto(
-  //         config.clienteId,
-  //         `SUBTOTAL: ${formatCurrency(pedido.subTotal)}`,
-  //         { fontSize: 28, centerText: false }
-  //       );
-  //       await imprimirImagenTexto(printer, imagenSubtotal);
-  //     } catch (err) {
-  //       printer.println(`SUBTOTAL: ${formatCurrency(pedido.subTotal)}`);
-  //     }
-  //   } else {
-  //     printer.println(`SUBTOTAL: ${formatCurrency(pedido.subTotal)}`);
-  //   }
-  // }
+        const svgHoraIcon = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" width="32" height="32">
+          <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 0 0 0-1.5h-3.75V6Z" clip-rule="evenodd" />
+        </svg>
+        `;
 
-  // if (pedido.descuentos && pedido.descuentos > 0) {
-  //   if (useFontTicket) {
-  //     try {
-  //       const imagenDescuento = await textRenderer.renderizarTexto(
-  //         config.clienteId,
-  //         `DESCUENTOS: -${formatCurrency(pedido.descuentos)}`,
-  //         { fontSize: 28, centerText: false }
-  //       );
-  //       await imprimirImagenTexto(printer, imagenDescuento);
-  //     } catch (err) {
-  //       printer.println(`DESCUENTOS: -${formatCurrency(pedido.descuentos)}`);
-  //     }
-  //   } else {
-  //     printer.println(`DESCUENTOS: -${formatCurrency(pedido.descuentos)}`);
-  //   }
-  // }
+        const svgBuffer = Buffer.from(svgHoraIcon);
+        const iconBuffer = await sharp(svgBuffer)
+          .png()
+          .resize({ width: 32, height: 32 })
+          .toBuffer();
 
-  // if (pedido.envio && pedido.envio > 0) {
-  //   if (useFontTicket) {
-  //     try {
-  //       const imagenEnvio = await textRenderer.renderizarTexto(
-  //         config.clienteId,
-  //         `ENVÍO: ${formatCurrency(pedido.envio)}`,
-  //         { fontSize: 28, centerText: false }
-  //       );
-  //       await imprimirImagenTexto(printer, imagenEnvio);
-  //     } catch (err) {
-  //       printer.println(`ENVÍO: ${formatCurrency(pedido.envio)}`);
-  //     }
-  //   } else {
-  //     printer.println(`ENVÍO: ${formatCurrency(pedido.envio)}`);
-  //   }
-  // }
+        const horaTextoBuffer = await textRenderer.renderizarTexto(
+          config.clienteId,
+          pedido.hora,
+          { fontSize: 28, centerText: false }
+        );
 
-  // TOTAL + ICONO
+        const iconMeta = await sharp(iconBuffer).metadata();
+        const textoMeta = await sharp(horaTextoBuffer).metadata();
+
+        const gap = 4;
+        const totalWidth = iconMeta.width + gap + textoMeta.width;
+        const totalHeight = Math.max(iconMeta.height, textoMeta.height);
+
+        const combinedBuffer = await sharp({
+          create: {
+            width: totalWidth,
+            height: totalHeight,
+            channels: 4,
+            background: { r: 255, g: 255, b: 255, alpha: 0 },
+          },
+        })
+          .composite([
+            {
+              input: iconBuffer,
+              top: Math.floor((totalHeight - iconMeta.height) / 2),
+              left: 0,
+            },
+            {
+              input: horaTextoBuffer,
+              top: Math.floor((totalHeight - textoMeta.height) / 2),
+              left: iconMeta.width + gap,
+            },
+          ])
+          .png()
+          .toBuffer();
+
+        printer.alignCenter();
+        await imprimirImagenTexto(printer, combinedBuffer);
+      } catch (err) {
+        console.error("Error generando hora con ícono:", err.message);
+        printer.alignCenter();
+        printer.println(pedido.hora);
+      }
+    } else {
+      printer.alignCenter();
+      printer.println(pedido.hora);
+    }
+  }
+
+  // 2. ACLARACIONES DEL PEDIDO (orderNotes generales)
+  if (pedido.aclaraciones && pedido.aclaraciones.trim()) {
+    if (useFontTicket) {
+      try {
+        const sharp = require("sharp");
+
+        const svgAclaracionesIcon = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" width="32" height="32">
+          <path fill-rule="evenodd" d="M4.848 2.771A49.144 49.144 0 0 1 12 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 0 1-3.476.383.39.39 0 0 0-.297.17l-2.755 4.133a.75.75 0 0 1-1.248 0l-2.755-4.133a.39.39 0 0 0-.297-.17 48.9 48.9 0 0 1-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97Z" clip-rule="evenodd" />
+        </svg>
+        `;
+
+        const svgBuffer = Buffer.from(svgAclaracionesIcon);
+        const iconBuffer = await sharp(svgBuffer)
+          .png()
+          .resize({ width: 32, height: 32 })
+          .toBuffer();
+
+        const aclaracionesTextoBuffer = await textRenderer.renderizarTexto(
+          config.clienteId,
+          pedido.aclaraciones,
+          { fontSize: 28, centerText: false }
+        );
+
+        const iconMeta = await sharp(iconBuffer).metadata();
+        const textoMeta = await sharp(aclaracionesTextoBuffer).metadata();
+
+        const gap = 4;
+        const totalWidth = iconMeta.width + gap + textoMeta.width;
+        const totalHeight = Math.max(iconMeta.height, textoMeta.height);
+
+        const combinedBuffer = await sharp({
+          create: {
+            width: totalWidth,
+            height: totalHeight,
+            channels: 4,
+            background: { r: 255, g: 255, b: 255, alpha: 0 },
+          },
+        })
+          .composite([
+            {
+              input: iconBuffer,
+              top: Math.floor((totalHeight - iconMeta.height) / 2),
+              left: 0,
+            },
+            {
+              input: aclaracionesTextoBuffer,
+              top: Math.floor((totalHeight - textoMeta.height) / 2),
+              left: iconMeta.width + gap,
+            },
+          ])
+          .png()
+          .toBuffer();
+
+        printer.alignCenter();
+        await imprimirImagenTexto(printer, combinedBuffer);
+      } catch (err) {
+        console.error("Error generando aclaraciones con ícono:", err.message);
+        printer.alignCenter();
+        printer.println(pedido.aclaraciones);
+      }
+    } else {
+      printer.alignCenter();
+      printer.println(pedido.aclaraciones);
+    }
+  }
+
+  // 3. DIRECCIÓN / TIPO DE ENTREGA
+  if (pedido.direccion && pedido.direccion.trim()) {
+    if (useFontTicket) {
+      try {
+        const sharp = require("sharp");
+
+        const svgEntregaIcon = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" width="32" height="32">
+          <path fill-rule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd" />
+        </svg>
+        `;
+
+        const svgBuffer = Buffer.from(svgEntregaIcon);
+        const iconBuffer = await sharp(svgBuffer)
+          .png()
+          .resize({ width: 32, height: 32 })
+          .toBuffer();
+
+        const direccionTextoBuffer = await textRenderer.renderizarTexto(
+          config.clienteId,
+          pedido.direccion,
+          { fontSize: 28, centerText: false }
+        );
+
+        const iconMeta = await sharp(iconBuffer).metadata();
+        const textoMeta = await sharp(direccionTextoBuffer).metadata();
+
+        const gap = 4;
+        const totalWidth = iconMeta.width + gap + textoMeta.width;
+        const totalHeight = Math.max(iconMeta.height, textoMeta.height);
+
+        const combinedBuffer = await sharp({
+          create: {
+            width: totalWidth,
+            height: totalHeight,
+            channels: 4,
+            background: { r: 255, g: 255, b: 255, alpha: 0 },
+          },
+        })
+          .composite([
+            {
+              input: iconBuffer,
+              top: Math.floor((totalHeight - iconMeta.height) / 2),
+              left: 0,
+            },
+            {
+              input: direccionTextoBuffer,
+              top: Math.floor((totalHeight - textoMeta.height) / 2),
+              left: iconMeta.width + gap,
+            },
+          ])
+          .png()
+          .toBuffer();
+
+        printer.alignCenter();
+        await imprimirImagenTexto(printer, combinedBuffer);
+      } catch (err) {
+        console.error("Error generando dirección con ícono:", err.message);
+        printer.alignCenter();
+        printer.println(pedido.direccion);
+      }
+    } else {
+      printer.alignCenter();
+      printer.println(pedido.direccion);
+    }
+  }
+
+  // 4. REFERENCIAS / DELIVERY NOTES
+  if (pedido.deliveryNotes && pedido.deliveryNotes.trim()) {
+    if (useFontTicket) {
+      try {
+        const sharp = require("sharp");
+
+        const svgNotasIcon = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" width="32" height="32">
+          <path fill-rule="evenodd" d="M4.125 3C3.089 3 2.25 3.84 2.25 4.875V18a3 3 0 0 0 3 3h15a3 3 0 0 1-3-3V4.875C17.25 3.839 16.41 3 15.375 3H4.125ZM12 9.75a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5H12Zm-.75-2.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H12a.75.75 0 0 1-.75-.75ZM6 12.75a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5H6Zm-.75 3.75a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75ZM6 6.75a.75.75 0 0 0-.75.75v3c0 .414.336.75.75.75h3a.75.75 0 0 0 .75-.75v-3A.75.75 0 0 0 9 6.75H6Z" clip-rule="evenodd" />
+          <path d="M18.75 6.75h1.875c.621 0 1.125.504 1.125 1.125V18a1.5 1.5 0 0 1-3 0V6.75Z" />
+        </svg>
+        `;
+
+        const svgBuffer = Buffer.from(svgNotasIcon);
+        const iconBuffer = await sharp(svgBuffer)
+          .png()
+          .resize({ width: 32, height: 32 })
+          .toBuffer();
+
+        const notasTextoBuffer = await textRenderer.renderizarTexto(
+          config.clienteId,
+          pedido.deliveryNotes,
+          { fontSize: 28, centerText: false }
+        );
+
+        const iconMeta = await sharp(iconBuffer).metadata();
+        const textoMeta = await sharp(notasTextoBuffer).metadata();
+
+        const gap = 4;
+        const totalWidth = iconMeta.width + gap + textoMeta.width;
+        const totalHeight = Math.max(iconMeta.height, textoMeta.height);
+
+        const combinedBuffer = await sharp({
+          create: {
+            width: totalWidth,
+            height: totalHeight,
+            channels: 4,
+            background: { r: 255, g: 255, b: 255, alpha: 0 },
+          },
+        })
+          .composite([
+            {
+              input: iconBuffer,
+              top: Math.floor((totalHeight - iconMeta.height) / 2),
+              left: 0,
+            },
+            {
+              input: notasTextoBuffer,
+              top: Math.floor((totalHeight - textoMeta.height) / 2),
+              left: iconMeta.width + gap,
+            },
+          ])
+          .png()
+          .toBuffer();
+
+        printer.alignCenter();
+        await imprimirImagenTexto(printer, combinedBuffer);
+      } catch (err) {
+        console.error(
+          "Error generando notas de delivery con ícono:",
+          err.message
+        );
+        printer.alignCenter();
+        printer.println(pedido.deliveryNotes);
+      }
+    } else {
+      printer.alignCenter();
+      printer.println(pedido.deliveryNotes);
+    }
+  }
+
+  // 5. TOTAL + MÉTODO DE PAGO + TELÉFONO
   printer.bold(true);
   printer.alignCenter();
 
@@ -349,7 +586,7 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
     printer.println(`TOTAL: ${formatCurrency(pedido.total)}`);
   }
 
-  // MÉTODO DE PAGO Y CLIENTE
+  // TELÉFONO DEL CLIENTE
   if (useFontTicket) {
     try {
       const sharp = require("sharp");
@@ -413,214 +650,6 @@ async function imprimirTicketVenta(printer, pedido, config, useFontTicket) {
         pedido.metodoPago
       } para el cliente: ${pedido.telefono}`
     );
-  }
-
-  // DIRECCIÓN / TIPO DE ENTREGA
-  if (pedido.direccion && pedido.direccion.trim()) {
-    if (useFontTicket) {
-      try {
-        const sharp = require("sharp");
-
-        // Icono de ubicación/mapa
-        const svgEntregaIcon = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" width="32" height="32">
-        <path fill-rule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd" />
-      </svg>
-      `;
-
-        const svgBuffer = Buffer.from(svgEntregaIcon);
-        const iconBuffer = await sharp(svgBuffer)
-          .png()
-          .resize({ width: 32, height: 32 })
-          .toBuffer();
-
-        const direccionTextoBuffer = await textRenderer.renderizarTexto(
-          config.clienteId,
-          pedido.direccion,
-          { fontSize: 28, centerText: false }
-        );
-
-        const iconMeta = await sharp(iconBuffer).metadata();
-        const textoMeta = await sharp(direccionTextoBuffer).metadata();
-
-        const gap = 4;
-        const totalWidth = iconMeta.width + gap + textoMeta.width;
-        const totalHeight = Math.max(iconMeta.height, textoMeta.height);
-
-        const combinedBuffer = await sharp({
-          create: {
-            width: totalWidth,
-            height: totalHeight,
-            channels: 4,
-            background: { r: 255, g: 255, b: 255, alpha: 0 },
-          },
-        })
-          .composite([
-            {
-              input: iconBuffer,
-              top: Math.floor((totalHeight - iconMeta.height) / 2),
-              left: 0,
-            },
-            {
-              input: direccionTextoBuffer,
-              top: Math.floor((totalHeight - textoMeta.height) / 2),
-              left: iconMeta.width + gap,
-            },
-          ])
-          .png()
-          .toBuffer();
-
-        printer.alignCenter();
-        await imprimirImagenTexto(printer, combinedBuffer);
-      } catch (err) {
-        console.error("Error generando dirección con ícono:", err.message);
-        printer.alignCenter();
-        printer.println(pedido.direccion);
-      }
-    } else {
-      printer.alignCenter();
-      printer.println(pedido.direccion);
-    }
-
-    // NOTAS DE DELIVERY
-    if (pedido.deliveryNotes && pedido.deliveryNotes.trim()) {
-      if (useFontTicket) {
-        try {
-          const sharp = require("sharp");
-
-          // Icono de nota/documento
-          const svgNotasIcon = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" width="32" height="32">
-          <path fill-rule="evenodd" d="M4.125 3C3.089 3 2.25 3.84 2.25 4.875V18a3 3 0 0 0 3 3h15a3 3 0 0 1-3-3V4.875C17.25 3.839 16.41 3 15.375 3H4.125ZM12 9.75a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5H12Zm-.75-2.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H12a.75.75 0 0 1-.75-.75ZM6 12.75a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5H6Zm-.75 3.75a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75ZM6 6.75a.75.75 0 0 0-.75.75v3c0 .414.336.75.75.75h3a.75.75 0 0 0 .75-.75v-3A.75.75 0 0 0 9 6.75H6Z" clip-rule="evenodd" />
-          <path d="M18.75 6.75h1.875c.621 0 1.125.504 1.125 1.125V18a1.5 1.5 0 0 1-3 0V6.75Z" />
-        </svg>
-        `;
-
-          const svgBuffer = Buffer.from(svgNotasIcon);
-          const iconBuffer = await sharp(svgBuffer)
-            .png()
-            .resize({ width: 32, height: 32 })
-            .toBuffer();
-
-          const notasTextoBuffer = await textRenderer.renderizarTexto(
-            config.clienteId,
-            pedido.deliveryNotes,
-            { fontSize: 28, centerText: false }
-          );
-
-          const iconMeta = await sharp(iconBuffer).metadata();
-          const textoMeta = await sharp(notasTextoBuffer).metadata();
-
-          const gap = 4;
-          const totalWidth = iconMeta.width + gap + textoMeta.width;
-          const totalHeight = Math.max(iconMeta.height, textoMeta.height);
-
-          const combinedBuffer = await sharp({
-            create: {
-              width: totalWidth,
-              height: totalHeight,
-              channels: 4,
-              background: { r: 255, g: 255, b: 255, alpha: 0 },
-            },
-          })
-            .composite([
-              {
-                input: iconBuffer,
-                top: Math.floor((totalHeight - iconMeta.height) / 2),
-                left: 0,
-              },
-              {
-                input: notasTextoBuffer,
-                top: Math.floor((totalHeight - textoMeta.height) / 2),
-                left: iconMeta.width + gap,
-              },
-            ])
-            .png()
-            .toBuffer();
-
-          printer.alignCenter();
-          await imprimirImagenTexto(printer, combinedBuffer);
-        } catch (err) {
-          console.error(
-            "Error generando notas de delivery con ícono:",
-            err.message
-          );
-          printer.alignCenter();
-          printer.println(pedido.deliveryNotes);
-        }
-      } else {
-        printer.alignCenter();
-        printer.println(pedido.deliveryNotes);
-      }
-    }
-  }
-
-  // NOTAS DEL PEDIDO (orderNotes) - SIEMPRE SE MUESTRA SI EXISTEN
-  if (pedido.aclaraciones && pedido.aclaraciones.trim()) {
-    if (useFontTicket) {
-      try {
-        const sharp = require("sharp");
-
-        // Icono de mensaje/chat
-        const svgAclaracionesIcon = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" width="32" height="32">
-        <path fill-rule="evenodd" d="M4.848 2.771A49.144 49.144 0 0 1 12 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 0 1-3.476.383.39.39 0 0 0-.297.17l-2.755 4.133a.75.75 0 0 1-1.248 0l-2.755-4.133a.39.39 0 0 0-.297-.17 48.9 48.9 0 0 1-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97Z" clip-rule="evenodd" />
-      </svg>
-      `;
-
-        const svgBuffer = Buffer.from(svgAclaracionesIcon);
-        const iconBuffer = await sharp(svgBuffer)
-          .png()
-          .resize({ width: 32, height: 32 })
-          .toBuffer();
-
-        const aclaracionesTextoBuffer = await textRenderer.renderizarTexto(
-          config.clienteId,
-          pedido.aclaraciones,
-          { fontSize: 28, centerText: false }
-        );
-
-        const iconMeta = await sharp(iconBuffer).metadata();
-        const textoMeta = await sharp(aclaracionesTextoBuffer).metadata();
-
-        const gap = 4;
-        const totalWidth = iconMeta.width + gap + textoMeta.width;
-        const totalHeight = Math.max(iconMeta.height, textoMeta.height);
-
-        const combinedBuffer = await sharp({
-          create: {
-            width: totalWidth,
-            height: totalHeight,
-            channels: 4,
-            background: { r: 255, g: 255, b: 255, alpha: 0 },
-          },
-        })
-          .composite([
-            {
-              input: iconBuffer,
-              top: Math.floor((totalHeight - iconMeta.height) / 2),
-              left: 0,
-            },
-            {
-              input: aclaracionesTextoBuffer,
-              top: Math.floor((totalHeight - textoMeta.height) / 2),
-              left: iconMeta.width + gap,
-            },
-          ])
-          .png()
-          .toBuffer();
-
-        printer.alignCenter();
-        await imprimirImagenTexto(printer, combinedBuffer);
-      } catch (err) {
-        console.error("Error generando aclaraciones con ícono:", err.message);
-        printer.alignCenter();
-        printer.println(pedido.aclaraciones);
-      }
-    } else {
-      printer.alignCenter();
-      printer.println(pedido.aclaraciones);
-    }
   }
 
   // PIE DE TICKET (logo cliente si está habilitado)

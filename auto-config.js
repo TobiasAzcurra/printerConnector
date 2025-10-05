@@ -1,6 +1,6 @@
 // auto-config.js - Sistema de auto-configuración (versión forzada a IP fija)
 // Esta versión evita el escaneo completo de la red y usa por defecto
-// la IP 192.168.0.169 (si no hay config.json con otra IP).
+// la IP 192.168.100.169 (si no hay config.json con otra IP).
 // Guardá este archivo sustituyendo el anterior y ejecutá `node auto-config.js`.
 
 const os = require("os");
@@ -154,7 +154,7 @@ class AutoConfigurator {
     }
   }
 
-  // Configuración automática forzada: usa la IP del config.json o la fija 192.168.0.169
+  // Configuración automática forzada: usa la IP del config.json o la fija 192.168.100.169
   async autoSetup() {
     console.log(
       "🚀 Iniciando configuración automática (modo rápido/fijar IP) ...\n"
@@ -166,9 +166,9 @@ class AutoConfigurator {
     // Si no hay printerIP en config.json, usar IP por defecto (forzada)
     if (!this.config.printerIP) {
       console.log(
-        "⚠️ No se encontró printerIP en config.json. Se fijará 192.168.0.169 por defecto."
+        "⚠️ No se encontró printerIP en config.json. Se fijará 192.168.100.169 por defecto."
       );
-      this.config.printerIP = "192.168.0.169";
+      this.config.printerIP = "192.168.100.169";
     } else {
       console.log(
         `ℹ️ Usando printerIP desde config.json: ${this.config.printerIP}`
