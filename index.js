@@ -24,7 +24,7 @@ const processingDir = path.join(ROOT_DIR, "print-processing");
 
 let config = {};
 let socket = null;
-let isProcessingQueue = false; // Flag para evitar procesamiento concurrente
+let isProcessingQueue = false;
 
 /* ==========================
    Util: imprimir buffer PNG
@@ -65,7 +65,7 @@ function cargarConfig() {
       )
     );
     console.log(
-      "⚠️ No se encontró config.json. Se creó uno por defecto. Editalo desde el navegador."
+      "No se encontró config.json. Se creó uno por defecto. Editalo desde el navegador."
     );
     process.exit(0);
   }
@@ -83,7 +83,7 @@ function cargarConfig() {
       config.useHeaderLogo = config.useLogo;
     }
 
-    console.log("✅ Config cargada:", {
+    console.log("Config cargada:", {
       ...config,
       assets: Object.fromEntries(
         Object.entries(config.assets || {}).map(([k, v]) => [
@@ -93,7 +93,7 @@ function cargarConfig() {
       ),
     });
   } catch (err) {
-    console.error("❌ Error al leer config.json:", err);
+    console.error("Error al leer config.json:", err);
     process.exit(1);
   }
 }
@@ -102,33 +102,33 @@ function cargarConfig() {
    Diagnóstico de red
    ========================== */
 function diagnosticarRed(ip) {
-  console.log("\n🔍 Ejecutando diagnóstico de conexión con la impresora...\n");
+  console.log("\nEjecutando diagnóstico de conexión con la impresora...\n");
   const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
   if (!ipRegex.test(ip)) {
-    console.log("❌ IP inválida:", ip);
+    console.log("IP inválida:", ip);
     return;
   }
 
   exec(`ping -n 2 ${ip}`, (error, stdout) => {
     if (error) {
-      console.log("❌ Error al intentar hacer ping:", error.message);
+      console.log("Error al intentar hacer ping:", error.message);
       return;
     }
 
     if (stdout.includes("Host de destino inaccesible")) {
-      console.log("🚫 La impresora NO está accesible en la red.");
+      console.log("La impresora NO está accesible en la red.");
       console.log(
-        "📋 Verificá que esté conectada al router y en la misma red que esta computadora."
+        "Verificá que esté conectada al router y en la misma red que esta computadora."
       );
     } else if (stdout.includes("tiempo de espera agotado")) {
-      console.log("⏱️ La impresora no respondió al ping. ¿Está encendida?");
+      console.log("La impresora no respondió al ping. ¿Está encendida?");
     } else if (
       stdout.includes("Respuesta desde") ||
       stdout.includes("bytes=")
     ) {
-      console.log("✅ Impresora encontrada en la red");
+      console.log("Impresora encontrada en la red");
     } else {
-      console.log("⚠️ Resultado indeterminado. Revisá conexión e IP.");
+      console.log("Resultado indeterminado. Revisá conexión e IP.");
     }
   });
 }
@@ -142,16 +142,16 @@ function conectarBackend() {
   socket = io("http://localhost:4000");
 
   socket.on("connect", () => {
-    console.log("🖥️ Conectado al backend como:", config.clienteId);
+    console.log("Conectado al backend como:", config.clienteId);
     socket.emit("register", { clienteId: config.clienteId });
   });
 
   socket.on("disconnect", () => {
-    console.log("❌ Desconectado del backend. Intentando reconectar...");
+    console.log("Desconectado del backend. Intentando reconectar...");
   });
 
   socket.on("connect_error", (error) => {
-    console.log("❌ Error de conexión con el backend:", error.message);
+    console.log("Error de conexión con el backend:", error.message);
   });
 
   socket.on("imprimir", handleImpresion);
@@ -171,16 +171,16 @@ async function imprimirConfirmacion() {
   });
 
   const isConnected = await printer.isPrinterConnected();
-  console.log("📡 Verificando conexión con impresora:", isConnected);
+  console.log("Verificando conexión con impresora:", isConnected);
   if (!isConnected) {
-    console.log("❌ No se pudo imprimir confirmación (impresora no conectada)");
+    console.log("No se pudo imprimir confirmación (impresora no conectada)");
     return;
   }
 
   try {
     await printHeaderLogo(printer, config);
   } catch (e) {
-    console.warn("⚠️ No se pudo imprimir header logo:", e.message);
+    console.warn("No se pudo imprimir header logo:", e.message);
   }
 
   printer.newLine();
@@ -203,7 +203,7 @@ async function imprimirConfirmacion() {
         printer.println("Impresora conectada correctamente");
       }
     } catch (err) {
-      console.error("❌ Error con fuente personalizada:", err.message);
+      console.error("Error con fuente personalizada:", err.message);
       printer.alignCenter();
       printer.bold(true);
       printer.println("Impresora conectada correctamente");
@@ -219,7 +219,7 @@ async function imprimirConfirmacion() {
   try {
     await printFooterLogo(printer, config);
   } catch (e) {
-    console.warn("⚠️ No se pudo imprimir footer logo:", e.message);
+    console.warn("No se pudo imprimir footer logo:", e.message);
   }
 
   if (config.useFontTicket) {
@@ -236,7 +236,7 @@ async function imprimirConfirmacion() {
         printer.println("Impulsado por Absolute.");
       }
     } catch (err) {
-      console.error("❌ Error con fuente en pie de confirmación:", err.message);
+      console.error("Error con fuente en pie de confirmación:", err.message);
       printer.println("Impulsado por Absolute.");
     }
   } else {
@@ -245,29 +245,36 @@ async function imprimirConfirmacion() {
 
   printer.cut();
   try {
-    console.log("🖨️ Ejecutando impresión de confirmación...");
+    console.log("Ejecutando impresión de confirmación...");
     await printer.execute();
-    console.log("✅ Confirmación impresa.");
+    console.log("Confirmación impresa.");
   } catch (err) {
-    console.error("❌ Error al imprimir confirmación:", err);
+    console.error("Error al imprimir confirmación:", err);
   }
 }
 
 /* ==========================
    Reinicio del conector
    ========================== */
-// 👉 Ahora acepta una opción 'coldStart' y NO imprime confirmación por defecto
-async function reiniciarConector({ coldStart = false } = {}) {
-  console.log("🔁 Recargando configuración...");
+async function reiniciarConector(skipConfirmationPrint = false) {
+  console.log("Recargando configuración...");
   cargarConfig();
   diagnosticarRed(config.printerIP);
   conectarBackend();
 
-  // Ya no imprimimos confirmación acá.
-  // Solo gestionamos trabajos pendientes y seguimos.
-  checkPendingPrintJobs();
+  const hayTrabajosPendientes =
+    fs.existsSync(tempPrintJobPath) ||
+    (fs.existsSync(queueDir) &&
+      fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).length > 0);
 
-  return { coldStart };
+  // Solo imprimir confirmación si:
+  // 1. No se pide explícitamente que se salte
+  // 2. No hay trabajos pendientes
+  if (!skipConfirmationPrint && !hayTrabajosPendientes) {
+    await imprimirConfirmacion();
+  }
+
+  checkPendingPrintJobs();
 }
 
 /* ==========================
@@ -275,10 +282,10 @@ async function reiniciarConector({ coldStart = false } = {}) {
    ========================== */
 async function handleImpresion(datos) {
   const jobId = datos._templateInfo?.jobId || "Sin ID";
-  console.log("📥 Trabajo de impresión recibido:", jobId);
+  console.log("Trabajo de impresión recibido:", jobId);
 
   const templateId = datos._templateInfo?.id || "receipt";
-  console.log(`🖨️ Usando plantilla: ${templateId}`);
+  console.log(`Usando plantilla: ${templateId}`);
 
   try {
     const ok = await printerRenderer.imprimirConPlantilla(
@@ -287,12 +294,12 @@ async function handleImpresion(datos) {
       templateId
     );
     if (ok) {
-      console.log(`✅ Impresión completada exitosamente: ${jobId}`);
+      console.log(`Impresión completada exitosamente: ${jobId}`);
     } else {
-      console.error(`❌ Error durante la impresión: ${jobId}`);
+      console.error(`Error durante la impresión: ${jobId}`);
     }
   } catch (err) {
-    console.error(`❌ Error al imprimir ${jobId}:`, err);
+    console.error(`Error al imprimir ${jobId}:`, err);
   }
 }
 
@@ -302,7 +309,7 @@ async function handleImpresion(datos) {
 function checkPendingPrintJobs() {
   if (fs.existsSync(tempPrintJobPath)) {
     try {
-      console.log("🔄 Migrando trabajo antiguo a nueva cola...");
+      console.log("Migrando trabajo antiguo a nueva cola...");
       const jobContent = fs.readFileSync(tempPrintJobPath, "utf8");
       const datos = JSON.parse(jobContent);
 
@@ -323,9 +330,9 @@ function checkPendingPrintJobs() {
       }
 
       fs.unlinkSync(tempPrintJobPath);
-      console.log("✅ Trabajo antiguo migrado a cola");
+      console.log("Trabajo antiguo migrado a cola");
     } catch (err) {
-      console.error("❌ Error al migrar trabajo antiguo:", err);
+      console.error("Error al migrar trabajo antiguo:", err);
       try {
         fs.unlinkSync(tempPrintJobPath);
       } catch (e) {
@@ -342,7 +349,7 @@ function checkPendingPrintJobs() {
    ========================== */
 async function processPrintQueue() {
   if (isProcessingQueue) {
-    console.log("⏭️ Ya hay un proceso de cola en ejecución, saltando...");
+    console.log("Ya hay un proceso de cola en ejecución, saltando...");
     return;
   }
 
@@ -365,7 +372,7 @@ async function processPrintQueue() {
     }
 
     console.log(`\n${"=".repeat(60)}`);
-    console.log(`📋 COLA DE IMPRESIÓN: ${files.length} trabajos pendientes`);
+    console.log(`COLA DE IMPRESIÓN: ${files.length} trabajos pendientes`);
     console.log(`${"=".repeat(60)}\n`);
 
     for (let i = 0; i < files.length; i++) {
@@ -380,44 +387,44 @@ async function processPrintQueue() {
           fs.mkdirSync(processingDir, { recursive: true });
         }
 
-        console.log(`  📁 Moviendo a processing: ${file}`);
+        console.log(`  Moviendo a processing: ${file}`);
         fs.renameSync(jobPath, processingPath);
 
         const jobContent = fs.readFileSync(processingPath, "utf8");
         const datos = JSON.parse(jobContent);
 
         const jobId = datos._templateInfo?.jobId || file;
-        console.log(`  🖨️ Imprimiendo job: ${jobId}`);
+        console.log(`  Imprimiendo job: ${jobId}`);
 
         const startTime = Date.now();
         await handleImpresion(datos);
         const duration = Date.now() - startTime;
 
-        console.log(`  ✅ Completado en ${duration}ms`);
-        console.log(`  🗑️ Eliminando archivo procesado`);
+        console.log(`  Completado en ${duration}ms`);
+        console.log(`  Eliminando archivo procesado`);
         fs.unlinkSync(processingPath);
 
-        console.log(`  ⏳ Esperando 500ms antes del siguiente...`);
+        console.log(`  Esperando 500ms antes del siguiente...`);
         await new Promise((r) => setTimeout(r, 500));
       } catch (err) {
-        console.error(`  ❌ Error procesando ${file}:`, err.message);
+        console.error(`  Error procesando ${file}:`, err.message);
 
         if (fs.existsSync(processingPath)) {
           try {
-            console.log(`  ↩️ Devolviendo ${file} a la cola para reintentar`);
+            console.log(`  Devolviendo ${file} a la cola para reintentar`);
             fs.renameSync(processingPath, jobPath);
           } catch (e) {
-            console.error(`  ⚠️ No se pudo devolver a cola:`, e.message);
+            console.error(`  No se pudo devolver a cola:`, e.message);
           }
         }
       }
     }
 
     console.log(`\n${"=".repeat(60)}`);
-    console.log(`✅ PROCESAMIENTO COMPLETADO`);
+    console.log(`PROCESAMIENTO COMPLETADO`);
     console.log(`${"=".repeat(60)}\n`);
   } catch (err) {
-    console.error("❌ Error general en procesamiento de cola:", err);
+    console.error("Error general en procesamiento de cola:", err);
   } finally {
     isProcessingQueue = false;
   }
@@ -426,10 +433,18 @@ async function processPrintQueue() {
 /* ==========================
    Watcher de config
    ========================== */
-// 👉 Al cambiar config.json, solo recargamos. NO imprimimos confirmación.
+let lastConfigChange = 0;
 fs.watchFile(configPath, () => {
-  console.log("📄 config.json modificado. Recargando...");
-  reiniciarConector({ coldStart: false });
+  const now = Date.now();
+
+  // Evitar múltiples triggers muy rápidos (debounce de 100ms)
+  if (now - lastConfigChange < 100) {
+    return;
+  }
+  lastConfigChange = now;
+
+  console.log("config.json modificado. Recargando...");
+  reiniciarConector(true); // TRUE = skip confirmation print
 });
 
 /* ==========================
@@ -443,27 +458,27 @@ function crearEstructuraDirectorios() {
 
   if (!fs.existsSync(assetsDir)) {
     fs.mkdirSync(assetsDir, { recursive: true });
-    console.log("📁 Carpeta de assets creada");
+    console.log("Carpeta de assets creada");
   }
   if (!fs.existsSync(fontsDir)) {
     fs.mkdirSync(fontsDir, { recursive: true });
-    console.log("📁 Carpeta de fuentes creada");
+    console.log("Carpeta de fuentes creada");
   }
   if (!fs.existsSync(fontsCacheDir)) {
     fs.mkdirSync(fontsCacheDir, { recursive: true });
-    console.log("📁 Carpeta de caché de fuentes creada");
+    console.log("Carpeta de caché de fuentes creada");
   }
   if (!fs.existsSync(logosDir)) {
     fs.mkdirSync(logosDir, { recursive: true });
-    console.log("📁 Carpeta de logos creada");
+    console.log("Carpeta de logos creada");
   }
   if (!fs.existsSync(queueDir)) {
     fs.mkdirSync(queueDir, { recursive: true });
-    console.log("📁 Carpeta de cola de impresión creada");
+    console.log("Carpeta de cola de impresión creada");
   }
   if (!fs.existsSync(processingDir)) {
     fs.mkdirSync(processingDir, { recursive: true });
-    console.log("📁 Carpeta de procesamiento creada");
+    console.log("Carpeta de procesamiento creada");
   }
 
   try {
@@ -491,15 +506,4 @@ setInterval(() => {
    Run
    ========================== */
 crearEstructuraDirectorios();
-
-// Arranque en frío: recargamos y LUEGO imprimimos confirmación SOLO una vez
-reiniciarConector({ coldStart: true }).then(async () => {
-  const hayTrabajosPendientes =
-    fs.existsSync(tempPrintJobPath) ||
-    (fs.existsSync(queueDir) &&
-      fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).length > 0);
-
-  if (!hayTrabajosPendientes) {
-    await imprimirConfirmacion();
-  }
-});
+reiniciarConector(false); // FALSE = imprimir confirmación al inicio

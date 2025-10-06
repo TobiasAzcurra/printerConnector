@@ -1,6 +1,6 @@
 {
   "clienteId": "cliente-default",
-  "printerIP": "192.168.100.169",
+  "printerIP": "192.168.0.169",
   "printerPort": 9100,
   "businessName": "Mi Negocio",
   "ticketWidth": 48,
