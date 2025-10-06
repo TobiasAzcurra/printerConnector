@@ -19,9 +19,12 @@ const ROOT_DIR = __dirname;
 const configPath = path.join(ROOT_DIR, "config.json");
 const tempPrintJobPath = path.join(ROOT_DIR, "temp-print-job.json");
 const tempFontImagePath = path.join(ROOT_DIR, "temp-font-image.png");
+const queueDir = path.join(ROOT_DIR, "print-queue");
+const processingDir = path.join(ROOT_DIR, "print-processing");
 
 let config = {};
 let socket = null;
+let isProcessingQueue = false; // Flag para evitar procesamiento concurrente
 
 /* ==========================
    Util: imprimir buffer PNG
@@ -55,7 +58,6 @@ function cargarConfig() {
           useFooterLogo: true,
           useFontTicket: false,
           ticketWidth: 48,
-          // estructura para assets versionados
           assets: {},
         },
         null,
@@ -72,7 +74,6 @@ function cargarConfig() {
     const raw = fs.readFileSync(configPath, "utf8");
     config = JSON.parse(raw);
 
-    // Defaults/retrocompat
     if (config.useHeaderLogo === undefined) config.useHeaderLogo = true;
     if (config.useFooterLogo === undefined) config.useFooterLogo = true;
     if (config.useFontTicket === undefined) config.useFontTicket = false;
@@ -84,7 +85,6 @@ function cargarConfig() {
 
     console.log("✅ Config cargada:", {
       ...config,
-      // evitar log de objetos grandes (recortar paths)
       assets: Object.fromEntries(
         Object.entries(config.assets || {}).map(([k, v]) => [
           k,
@@ -109,7 +109,6 @@ function diagnosticarRed(ip) {
     return;
   }
 
-  // Windows (-n), en Linux/Mac cambiar a -c
   exec(`ping -n 2 ${ip}`, (error, stdout) => {
     if (error) {
       console.log("❌ Error al intentar hacer ping:", error.message);
@@ -127,7 +126,7 @@ function diagnosticarRed(ip) {
       stdout.includes("Respuesta desde") ||
       stdout.includes("bytes=")
     ) {
-      console.log("✅ Impresora encontrada en la red 🎉");
+      console.log("✅ Impresora encontrada en la red");
     } else {
       console.log("⚠️ Resultado indeterminado. Revisá conexión e IP.");
     }
@@ -178,7 +177,6 @@ async function imprimirConfirmacion() {
     return;
   }
 
-  // Logo HEADER (dinámico por cliente, usando /assets/logos/<clienteId>/header.png si existe)
   try {
     await printHeaderLogo(printer, config);
   } catch (e) {
@@ -188,7 +186,6 @@ async function imprimirConfirmacion() {
   printer.newLine();
   printer.newLine();
 
-  // Texto central
   if (config.useFontTicket) {
     try {
       const fontInfo = fontRenderer.obtenerInfoFuente(config.clienteId);
@@ -219,14 +216,12 @@ async function imprimirConfirmacion() {
 
   printer.newLine();
 
-  // Logo FOOTER (dinámico por cliente)
   try {
     await printFooterLogo(printer, config);
   } catch (e) {
     console.warn("⚠️ No se pudo imprimir footer logo:", e.message);
   }
 
-  // Pie "Impulsado por Absolute"
   if (config.useFontTicket) {
     try {
       const fontInfo = fontRenderer.obtenerInfoFuente(config.clienteId);
@@ -261,27 +256,26 @@ async function imprimirConfirmacion() {
 /* ==========================
    Reinicio del conector
    ========================== */
-async function reiniciarConector() {
+// 👉 Ahora acepta una opción 'coldStart' y NO imprime confirmación por defecto
+async function reiniciarConector({ coldStart = false } = {}) {
   console.log("🔁 Recargando configuración...");
   cargarConfig();
   diagnosticarRed(config.printerIP);
   conectarBackend();
 
-  const hayTrabajosPendientes = fs.existsSync(tempPrintJobPath);
-
-  // Solo imprimo confirmación si NO hay jobs pendientes (no ensuciar cola)
-  if (!hayTrabajosPendientes) {
-    await imprimirConfirmacion();
-  }
-
+  // Ya no imprimimos confirmación acá.
+  // Solo gestionamos trabajos pendientes y seguimos.
   checkPendingPrintJobs();
+
+  return { coldStart };
 }
 
 /* ==========================
    Handler de impresión
    ========================== */
 async function handleImpresion(datos) {
-  console.log("📥 Trabajo de impresión recibido:", datos.id || "Sin ID");
+  const jobId = datos._templateInfo?.jobId || "Sin ID";
+  console.log("📥 Trabajo de impresión recibido:", jobId);
 
   const templateId = datos._templateInfo?.id || "receipt";
   console.log(`🖨️ Usando plantilla: ${templateId}`);
@@ -292,10 +286,13 @@ async function handleImpresion(datos) {
       datos,
       templateId
     );
-    if (ok) console.log(`✅ Impresión completada: ${templateId}`);
-    else console.error(`❌ Error durante la impresión: ${templateId}`);
+    if (ok) {
+      console.log(`✅ Impresión completada exitosamente: ${jobId}`);
+    } else {
+      console.error(`❌ Error durante la impresión: ${jobId}`);
+    }
   } catch (err) {
-    console.error(`❌ Error al imprimir con plantilla ${templateId}:`, err);
+    console.error(`❌ Error al imprimir ${jobId}:`, err);
   }
 }
 
@@ -303,54 +300,136 @@ async function handleImpresion(datos) {
    Trabajos pendientes
    ========================== */
 function checkPendingPrintJobs() {
-  if (!fs.existsSync(tempPrintJobPath)) return;
-
-  try {
-    console.log("🔍 Encontrado trabajo de impresión pendiente...");
-    const jobContent = fs.readFileSync(tempPrintJobPath, "utf8");
-    const datos = JSON.parse(jobContent);
-
-    if (datos.isBatchPrint && Array.isArray(datos.jobs)) {
-      console.log(
-        `📦 Procesando lote de ${datos.jobs.length} trabajos de impresión`
-      );
-      processBatchJobs(datos.jobs);
-    } else {
-      handleImpresion(datos);
-    }
-
-    fs.unlinkSync(tempPrintJobPath);
-    console.log("✅ Trabajo de impresión pendiente procesado");
-  } catch (err) {
-    console.error("❌ Error al procesar trabajo pendiente:", err);
+  if (fs.existsSync(tempPrintJobPath)) {
     try {
+      console.log("🔄 Migrando trabajo antiguo a nueva cola...");
+      const jobContent = fs.readFileSync(tempPrintJobPath, "utf8");
+      const datos = JSON.parse(jobContent);
+
+      if (!fs.existsSync(queueDir)) {
+        fs.mkdirSync(queueDir, { recursive: true });
+      }
+
+      if (datos.isBatchPrint && Array.isArray(datos.jobs)) {
+        datos.jobs.forEach((job, index) => {
+          const jobId = `${Date.now()}-migrated-${index}`;
+          const jobPath = path.join(queueDir, `${jobId}.json`);
+          fs.writeFileSync(jobPath, JSON.stringify(job, null, 2));
+        });
+      } else {
+        const jobId = `${Date.now()}-migrated`;
+        const jobPath = path.join(queueDir, `${jobId}.json`);
+        fs.writeFileSync(jobPath, JSON.stringify(datos, null, 2));
+      }
+
       fs.unlinkSync(tempPrintJobPath);
-    } catch (e) {
-      console.error("No se pudo eliminar el archivo temporal:", e);
+      console.log("✅ Trabajo antiguo migrado a cola");
+    } catch (err) {
+      console.error("❌ Error al migrar trabajo antiguo:", err);
+      try {
+        fs.unlinkSync(tempPrintJobPath);
+      } catch (e) {
+        console.error("No se pudo eliminar el archivo temporal:", e);
+      }
     }
   }
+
+  processPrintQueue();
 }
 
-async function processBatchJobs(jobs) {
-  for (let i = 0; i < jobs.length; i++) {
-    const job = jobs[i];
-    console.log(`🖨️ Procesando trabajo ${i + 1} de ${jobs.length}`);
-    try {
-      await handleImpresion(job);
-      await new Promise((r) => setTimeout(r, 500));
-    } catch (err) {
-      console.error(`❌ Error en trabajo ${i + 1}:`, err);
-    }
+/* ==========================
+   Procesador de cola
+   ========================== */
+async function processPrintQueue() {
+  if (isProcessingQueue) {
+    console.log("⏭️ Ya hay un proceso de cola en ejecución, saltando...");
+    return;
   }
-  console.log(`✅ Lote de ${jobs.length} trabajos completado`);
+
+  try {
+    isProcessingQueue = true;
+
+    if (!fs.existsSync(queueDir)) {
+      isProcessingQueue = false;
+      return;
+    }
+
+    const files = fs
+      .readdirSync(queueDir)
+      .filter((f) => f.endsWith(".json"))
+      .sort();
+
+    if (files.length === 0) {
+      isProcessingQueue = false;
+      return;
+    }
+
+    console.log(`\n${"=".repeat(60)}`);
+    console.log(`📋 COLA DE IMPRESIÓN: ${files.length} trabajos pendientes`);
+    console.log(`${"=".repeat(60)}\n`);
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const jobPath = path.join(queueDir, file);
+      const processingPath = path.join(processingDir, file);
+
+      console.log(`\n[${i + 1}/${files.length}] Procesando: ${file}`);
+
+      try {
+        if (!fs.existsSync(processingDir)) {
+          fs.mkdirSync(processingDir, { recursive: true });
+        }
+
+        console.log(`  📁 Moviendo a processing: ${file}`);
+        fs.renameSync(jobPath, processingPath);
+
+        const jobContent = fs.readFileSync(processingPath, "utf8");
+        const datos = JSON.parse(jobContent);
+
+        const jobId = datos._templateInfo?.jobId || file;
+        console.log(`  🖨️ Imprimiendo job: ${jobId}`);
+
+        const startTime = Date.now();
+        await handleImpresion(datos);
+        const duration = Date.now() - startTime;
+
+        console.log(`  ✅ Completado en ${duration}ms`);
+        console.log(`  🗑️ Eliminando archivo procesado`);
+        fs.unlinkSync(processingPath);
+
+        console.log(`  ⏳ Esperando 500ms antes del siguiente...`);
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) {
+        console.error(`  ❌ Error procesando ${file}:`, err.message);
+
+        if (fs.existsSync(processingPath)) {
+          try {
+            console.log(`  ↩️ Devolviendo ${file} a la cola para reintentar`);
+            fs.renameSync(processingPath, jobPath);
+          } catch (e) {
+            console.error(`  ⚠️ No se pudo devolver a cola:`, e.message);
+          }
+        }
+      }
+    }
+
+    console.log(`\n${"=".repeat(60)}`);
+    console.log(`✅ PROCESAMIENTO COMPLETADO`);
+    console.log(`${"=".repeat(60)}\n`);
+  } catch (err) {
+    console.error("❌ Error general en procesamiento de cola:", err);
+  } finally {
+    isProcessingQueue = false;
+  }
 }
 
 /* ==========================
    Watcher de config
    ========================== */
+// 👉 Al cambiar config.json, solo recargamos. NO imprimimos confirmación.
 fs.watchFile(configPath, () => {
   console.log("📄 config.json modificado. Recargando...");
-  reiniciarConector();
+  reiniciarConector({ coldStart: false });
 });
 
 /* ==========================
@@ -378,8 +457,15 @@ function crearEstructuraDirectorios() {
     fs.mkdirSync(logosDir, { recursive: true });
     console.log("📁 Carpeta de logos creada");
   }
+  if (!fs.existsSync(queueDir)) {
+    fs.mkdirSync(queueDir, { recursive: true });
+    console.log("📁 Carpeta de cola de impresión creada");
+  }
+  if (!fs.existsSync(processingDir)) {
+    fs.mkdirSync(processingDir, { recursive: true });
+    console.log("📁 Carpeta de procesamiento creada");
+  }
 
-  // Crear subcarpetas por cliente si ya hay clienteId en config
   try {
     if (fs.existsSync(configPath)) {
       const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -395,7 +481,25 @@ function crearEstructuraDirectorios() {
 }
 
 /* ==========================
+   Polling de cola cada 2 segundos
+   ========================== */
+setInterval(() => {
+  processPrintQueue();
+}, 2000);
+
+/* ==========================
    Run
    ========================== */
 crearEstructuraDirectorios();
-reiniciarConector();
+
+// Arranque en frío: recargamos y LUEGO imprimimos confirmación SOLO una vez
+reiniciarConector({ coldStart: true }).then(async () => {
+  const hayTrabajosPendientes =
+    fs.existsSync(tempPrintJobPath) ||
+    (fs.existsSync(queueDir) &&
+      fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).length > 0);
+
+  if (!hayTrabajosPendientes) {
+    await imprimirConfirmacion();
+  }
+});

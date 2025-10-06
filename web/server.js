@@ -397,11 +397,18 @@ app.delete("/api/logo-footer", (req, res) => {
 // Endpoint para imprimir plantillas (soporta impresión por lotes)
 app.post("/api/imprimir", (req, res) => {
   const data = req.body;
-  const templateId = data.templateId || "receipt"; // Por defecto se usa la plantilla de ticket
+  const templateId = data.templateId || "receipt";
 
   console.log(`📦 Recibido trabajo de impresión con plantilla: ${templateId}`);
 
   try {
+    const queueDir = path.join(ROOT_DIR, "print-queue");
+
+    // Crear directorio de cola si no existe
+    if (!fs.existsSync(queueDir)) {
+      fs.mkdirSync(queueDir, { recursive: true });
+    }
+
     // Comprobar si es una impresión por lotes
     const isBatchPrint =
       Array.isArray(data.products) && data.products.length > 0;
@@ -417,6 +424,10 @@ app.post("/api/imprimir", (req, res) => {
 
       // Creamos un array para guardar los trabajos de impresión
       const printJobs = data.products.map((product, index) => {
+        const jobId = `${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}-${index}`;
+
         // Create data object for each product
         const productData = {
           templateId: templateId,
@@ -426,6 +437,7 @@ app.post("/api/imprimir", (req, res) => {
             id: templateId,
             timestamp: new Date().toISOString(),
             batchId: `batch-${Date.now()}`,
+            jobId,
             index: index,
             total: data.products.length,
           },
@@ -449,7 +461,7 @@ app.post("/api/imprimir", (req, res) => {
           });
         }
 
-        return productData;
+        return { jobId, data: productData };
       });
 
       // Si hay productos inválidos, retornar error
@@ -460,29 +472,23 @@ app.post("/api/imprimir", (req, res) => {
         });
       }
 
-      // Guardar los trabajos de impresión por lotes
-      fs.writeFileSync(
-        tempPrintJobPath,
-        JSON.stringify(
-          {
-            isBatchPrint: true,
-            jobs: printJobs,
-          },
-          null,
-          2
-        )
-      );
+      // Guardar cada trabajo en un archivo separado
+      printJobs.forEach(({ jobId, data }) => {
+        const jobPath = path.join(queueDir, `${jobId}.json`);
+        fs.writeFileSync(jobPath, JSON.stringify(data, null, 2));
+      });
 
       // Tocar el archivo config.json para desencadenar el watcher del conector
       const configContent = readConfigSafe();
       fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
 
       console.log(
-        `✅ Trabajo de impresión por lotes (${templateId}) enviado al conector`
+        `✅ ${printJobs.length} trabajos de impresión por lotes encolados`
       );
       res.json({
         success: true,
-        message: `Trabajo de impresión por lotes con ${printJobs.length} productos enviado`,
+        message: `${printJobs.length} trabajos encolados correctamente`,
+        jobIds: printJobs.map((j) => j.jobId),
       });
     } else {
       // Impresión individual
@@ -496,36 +502,71 @@ app.post("/api/imprimir", (req, res) => {
         });
       }
 
-      // Guardar temporalmente el pedido y notificar al conector (index.js)
+      // Generar ID único para el trabajo
+      const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const jobPath = path.join(queueDir, `${jobId}.json`);
+
+      // Guardar trabajo en la cola
       const datosParaImprimir = {
         ...data,
         _templateInfo: {
           id: templateId,
           timestamp: new Date().toISOString(),
+          jobId,
         },
       };
 
-      fs.writeFileSync(
-        tempPrintJobPath,
-        JSON.stringify(datosParaImprimir, null, 2)
-      );
+      fs.writeFileSync(jobPath, JSON.stringify(datosParaImprimir, null, 2));
 
       // Tocar config.json para desencadenar el watcher
       const configContent = readConfigSafe();
       fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
 
-      console.log(
-        `✅ Trabajo de impresión (${templateId}) enviado al conector`
-      );
+      console.log(`✅ Trabajo ${jobId} encolado correctamente`);
       res.json({
         success: true,
-        message: `Trabajo de impresión con plantilla ${templateId} enviado`,
+        message: "Trabajo encolado correctamente",
+        jobId,
       });
     }
   } catch (err) {
     console.error(`❌ Error al procesar solicitud de impresión:`, err);
     res.status(500).json({
       error: "Error al procesar la solicitud de impresión",
+      details: err.message,
+    });
+  }
+});
+
+// Endpoint para obtener estado de la cola de impresión
+app.get("/api/print-queue/status", (req, res) => {
+  try {
+    const queueDir = path.join(ROOT_DIR, "print-queue");
+    const processingDir = path.join(ROOT_DIR, "print-processing");
+
+    let pending = 0;
+    let processing = 0;
+
+    if (fs.existsSync(queueDir)) {
+      pending = fs
+        .readdirSync(queueDir)
+        .filter((f) => f.endsWith(".json")).length;
+    }
+
+    if (fs.existsSync(processingDir)) {
+      processing = fs
+        .readdirSync(processingDir)
+        .filter((f) => f.endsWith(".json")).length;
+    }
+
+    res.json({
+      pending,
+      processing,
+      total: pending + processing,
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: "Error al obtener estado de cola",
       details: err.message,
     });
   }
