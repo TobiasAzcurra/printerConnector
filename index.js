@@ -17,10 +17,11 @@ const { printHeaderLogo, printFooterLogo } = require("./src/print-logos");
 
 const ROOT_DIR = __dirname;
 const configPath = path.join(ROOT_DIR, "config.json");
-const tempPrintJobPath = path.join(ROOT_DIR, "temp-print-job.json");
 const tempFontImagePath = path.join(ROOT_DIR, "temp-font-image.png");
 const queueDir = path.join(ROOT_DIR, "print-queue");
 const processingDir = path.join(ROOT_DIR, "print-processing");
+
+const API_BASE = "http://localhost:4040";
 
 let config = {};
 let socket = null;
@@ -263,18 +264,14 @@ async function reiniciarConector(skipConfirmationPrint = false) {
   conectarBackend();
 
   const hayTrabajosPendientes =
-    fs.existsSync(tempPrintJobPath) ||
-    (fs.existsSync(queueDir) &&
-      fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).length > 0);
+    fs.existsSync(queueDir) &&
+    fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).length > 0;
 
-  // Solo imprimir confirmación si:
-  // 1. No se pide explícitamente que se salte
-  // 2. No hay trabajos pendientes
   if (!skipConfirmationPrint && !hayTrabajosPendientes) {
     await imprimirConfirmacion();
   }
 
-  checkPendingPrintJobs();
+  processPrintQueue();
 }
 
 /* ==========================
@@ -295,53 +292,42 @@ async function handleImpresion(datos) {
     );
     if (ok) {
       console.log(`Impresión completada exitosamente: ${jobId}`);
+      return true;
     } else {
       console.error(`Error durante la impresión: ${jobId}`);
+      return false;
     }
   } catch (err) {
     console.error(`Error al imprimir ${jobId}:`, err);
+    return false;
   }
 }
 
 /* ==========================
-   Trabajos pendientes
+   Notificar al servidor
    ========================== */
-function checkPendingPrintJobs() {
-  if (fs.existsSync(tempPrintJobPath)) {
-    try {
-      console.log("Migrando trabajo antiguo a nueva cola...");
-      const jobContent = fs.readFileSync(tempPrintJobPath, "utf8");
-      const datos = JSON.parse(jobContent);
-
-      if (!fs.existsSync(queueDir)) {
-        fs.mkdirSync(queueDir, { recursive: true });
-      }
-
-      if (datos.isBatchPrint && Array.isArray(datos.jobs)) {
-        datos.jobs.forEach((job, index) => {
-          const jobId = `${Date.now()}-migrated-${index}`;
-          const jobPath = path.join(queueDir, `${jobId}.json`);
-          fs.writeFileSync(jobPath, JSON.stringify(job, null, 2));
-        });
-      } else {
-        const jobId = `${Date.now()}-migrated`;
-        const jobPath = path.join(queueDir, `${jobId}.json`);
-        fs.writeFileSync(jobPath, JSON.stringify(datos, null, 2));
-      }
-
-      fs.unlinkSync(tempPrintJobPath);
-      console.log("Trabajo antiguo migrado a cola");
-    } catch (err) {
-      console.error("Error al migrar trabajo antiguo:", err);
-      try {
-        fs.unlinkSync(tempPrintJobPath);
-      } catch (e) {
-        console.error("No se pudo eliminar el archivo temporal:", e);
-      }
-    }
+async function notifyJobCompleted(jobId) {
+  try {
+    await fetch(`${API_BASE}/api/job-completed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId }),
+    });
+  } catch (err) {
+    console.error("No se pudo notificar completado:", err.message);
   }
+}
 
-  processPrintQueue();
+async function notifyJobFailed(jobId, error) {
+  try {
+    await fetch(`${API_BASE}/api/job-failed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId, error: error.message }),
+    });
+  } catch (err) {
+    console.error("No se pudo notificar fallo:", err.message);
+  }
 }
 
 /* ==========================
@@ -349,7 +335,6 @@ function checkPendingPrintJobs() {
    ========================== */
 async function processPrintQueue() {
   if (isProcessingQueue) {
-    console.log("Ya hay un proceso de cola en ejecución, saltando...");
     return;
   }
 
@@ -393,28 +378,45 @@ async function processPrintQueue() {
         const jobContent = fs.readFileSync(processingPath, "utf8");
         const datos = JSON.parse(jobContent);
 
-        const jobId = datos._templateInfo?.jobId || file;
+        const jobId = datos._templateInfo?.jobId || file.replace(".json", "");
         console.log(`  Imprimiendo job: ${jobId}`);
 
         const startTime = Date.now();
-        await handleImpresion(datos);
+        const success = await handleImpresion(datos);
         const duration = Date.now() - startTime;
 
-        console.log(`  Completado en ${duration}ms`);
-        console.log(`  Eliminando archivo procesado`);
-        fs.unlinkSync(processingPath);
+        if (success) {
+          console.log(`  Completado en ${duration}ms`);
+          console.log(`  Eliminando archivo procesado`);
+          fs.unlinkSync(processingPath);
+
+          // Notificar al servidor que completó
+          await notifyJobCompleted(jobId);
+        } else {
+          throw new Error("Impresión falló");
+        }
 
         console.log(`  Esperando 500ms antes del siguiente...`);
         await new Promise((r) => setTimeout(r, 500));
       } catch (err) {
         console.error(`  Error procesando ${file}:`, err.message);
 
+        const jobId = file.replace(".json", "");
+        await notifyJobFailed(jobId, err);
+
+        // Mover a carpeta de fallidos en vez de devolver a cola
+        const failedDir = path.join(ROOT_DIR, "print-failed");
+        if (!fs.existsSync(failedDir)) {
+          fs.mkdirSync(failedDir, { recursive: true });
+        }
+
         if (fs.existsSync(processingPath)) {
           try {
-            console.log(`  Devolviendo ${file} a la cola para reintentar`);
-            fs.renameSync(processingPath, jobPath);
+            const failedPath = path.join(failedDir, file);
+            fs.renameSync(processingPath, failedPath);
+            console.log(`  Movido a carpeta de fallidos`);
           } catch (e) {
-            console.error(`  No se pudo devolver a cola:`, e.message);
+            console.error(`  No se pudo mover a fallidos:`, e.message);
           }
         }
       }
@@ -437,14 +439,13 @@ let lastConfigChange = 0;
 fs.watchFile(configPath, () => {
   const now = Date.now();
 
-  // Evitar múltiples triggers muy rápidos (debounce de 100ms)
   if (now - lastConfigChange < 100) {
     return;
   }
   lastConfigChange = now;
 
   console.log("config.json modificado. Recargando...");
-  reiniciarConector(true); // TRUE = skip confirmation print
+  reiniciarConector(true);
 });
 
 /* ==========================
@@ -455,6 +456,7 @@ function crearEstructuraDirectorios() {
   const fontsDir = path.join(assetsDir, "fonts");
   const fontsCacheDir = path.join(fontsDir, "cache");
   const logosDir = path.join(assetsDir, "logos");
+  const failedDir = path.join(ROOT_DIR, "print-failed");
 
   if (!fs.existsSync(assetsDir)) {
     fs.mkdirSync(assetsDir, { recursive: true });
@@ -479,6 +481,10 @@ function crearEstructuraDirectorios() {
   if (!fs.existsSync(processingDir)) {
     fs.mkdirSync(processingDir, { recursive: true });
     console.log("Carpeta de procesamiento creada");
+  }
+  if (!fs.existsSync(failedDir)) {
+    fs.mkdirSync(failedDir, { recursive: true });
+    console.log("Carpeta de fallidos creada");
   }
 
   try {
@@ -506,4 +512,4 @@ setInterval(() => {
    Run
    ========================== */
 crearEstructuraDirectorios();
-reiniciarConector(false); // FALSE = imprimir confirmación al inicio
+reiniciarConector(false);

@@ -2,44 +2,61 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const cors = require("cors"); // Para manejar solicitudes cross-origin
-const multer = require("multer"); // Para manejar upload de archivos
-const sharp = require("sharp"); // Para procesar imágenes
-const net = require("net"); // Para ping de puerto 9100
-const crypto = require("crypto"); // Para hashing de assets
+const cors = require("cors");
+const multer = require("multer");
+const sharp = require("sharp");
+const net = require("net");
+const crypto = require("crypto");
+const http = require("http");
+const { Server } = require("socket.io");
+
 const fontRenderer = require("../src/font-renderer");
 const fontCache = require("../src/font-renderer/cache");
 const textRenderer = require("../src/font-renderer/text-renderer");
 const templateSystem = require("../src/templates");
+const QueueManager = require("../src/queue-manager");
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
+
 const PORT = 4040;
 
 // Rutas a archivos y directorios importantes
 const ROOT_DIR = path.join(__dirname, "..");
 const configPath = path.join(ROOT_DIR, "config.json");
 const assetsDir = path.join(ROOT_DIR, "assets");
-const fontsDir = path.join(assetsDir, "fonts"); // Directorio para fuentes
-const tempPrintJobPath = path.join(ROOT_DIR, "temp-print-job.json");
+const fontsDir = path.join(assetsDir, "fonts");
+const queueDir = path.join(ROOT_DIR, "print-queue");
+const processingDir = path.join(ROOT_DIR, "print-processing");
+
+// Inicializar QueueManager
+const queueManager = new QueueManager(queueDir, processingDir);
+
+// Notificar a clientes WebSocket cuando cambie el estado de la cola
+queueManager.addListener((snapshot) => {
+  io.emit("queue-update", snapshot);
+});
 
 // --- Compat retro (archivos legacy) ---
 const legacyHeaderPath = path.join(assetsDir, "logo-header.png");
 const legacyFooterPath = path.join(assetsDir, "logo-footer.png");
 
 // Configuración de multer para subir archivos
-const storage = multer.memoryStorage(); // Almacenar archivo en memoria temporalmente
+const storage = multer.memoryStorage();
 
-// Función de filtro que acepta tanto imágenes como archivos .ttf
 const fileFilter = function (req, file, cb) {
-  // Para rutas de carga de fuentes, permitir archivos .ttf
   if (req.path.includes("/upload-font")) {
     if (!file.originalname.toLowerCase().endsWith(".ttf")) {
       return cb(new Error("Solo se permiten archivos TTF"), false);
     }
     return cb(null, true);
-  }
-  // Para otras rutas (logos), permitir solo imágenes
-  else {
+  } else {
     if (!file.mimetype.startsWith("image/")) {
       return cb(new Error("Solo se permiten archivos de imagen"), false);
     }
@@ -49,13 +66,13 @@ const fileFilter = function (req, file, cb) {
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // Límite de 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: fileFilter,
 });
 
 // Middleware
 app.use(express.json());
-app.use(cors()); // Habilitar CORS para todas las rutas
+app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
 
 // Crear directorios necesarios si no existen
@@ -64,11 +81,22 @@ if (!fs.existsSync(assetsDir)) {
   console.log("📁 Carpeta de assets creada");
 }
 
-// Crear directorio de fuentes si no existe
 if (!fs.existsSync(fontsDir)) {
   fs.mkdirSync(fontsDir, { recursive: true });
   console.log("📁 Carpeta de fuentes creada");
 }
+
+// Socket.IO - manejar conexiones
+io.on("connection", (socket) => {
+  console.log("🔌 Cliente WebSocket conectado:", socket.id);
+
+  // Enviar estado actual inmediatamente al conectarse
+  socket.emit("queue-update", queueManager.getSnapshot());
+
+  socket.on("disconnect", () => {
+    console.log("🔌 Cliente WebSocket desconectado:", socket.id);
+  });
+});
 
 // Utilidad: leer config con defaults
 function readConfigSafe() {
@@ -90,7 +118,6 @@ function readConfigSafe() {
 
   const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 
-  // Asegurar que los campos nuevos existan (para retrocompatibilidad)
   if (config.useHeaderLogo === undefined) config.useHeaderLogo = true;
   if (config.useFooterLogo === undefined) config.useFooterLogo = true;
   if (config.ticketWidth === undefined) config.ticketWidth = 48;
@@ -99,7 +126,6 @@ function readConfigSafe() {
   if (!config.businessName) config.businessName = "Mi Negocio";
   if (!config.assets) config.assets = {};
 
-  // Retrocompatibilidad con configuración anterior
   if (config.useLogo !== undefined && config.useHeaderLogo === undefined) {
     config.useHeaderLogo = config.useLogo;
   }
@@ -107,10 +133,6 @@ function readConfigSafe() {
   return config;
 }
 
-/**
- * Resuelve paths de logos priorizando los guardados en config.assets.* (por cliente),
- * con fallback a los archivos legacy en assets/logo-*.png.
- */
 function resolveLogoPathsFromConfig() {
   const cfg = readConfigSafe();
   const clienteId = (cfg.clienteId || "cliente-default").toString();
@@ -153,13 +175,8 @@ app.get("/api/config", (req, res) => {
 // Endpoint para guardar la configuración
 app.post("/api/config", (req, res) => {
   try {
-    // Obtener la configuración actual
     const currentConfig = readConfigSafe();
-
-    // Fusionar con los nuevos valores
     const newConfig = { ...currentConfig, ...req.body };
-
-    // Guardar
     fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
     res.json({
       success: true,
@@ -172,7 +189,7 @@ app.post("/api/config", (req, res) => {
   }
 });
 
-// (Extra) Endpoint para testear la impresora por TCP (puerto 9100)
+// Endpoint para testear la impresora por TCP
 app.get("/api/ping-printer", async (req, res) => {
   try {
     const cfg = readConfigSafe();
@@ -232,7 +249,6 @@ app.get("/api/ping-printer", async (req, res) => {
 
 // ------------------------- LOGOS -------------------------
 
-// Endpoint para verificar si existen los logos
 app.get("/api/logo-exists", (req, res) => {
   const { headerPath, footerPath } = resolveLogoPathsFromConfig();
   res.json({
@@ -243,7 +259,6 @@ app.get("/api/logo-exists", (req, res) => {
   });
 });
 
-// Endpoint para obtener el logo del encabezado
 app.get("/api/logo-header", (req, res) => {
   const { headerPath } = resolveLogoPathsFromConfig();
   if (fs.existsSync(headerPath)) {
@@ -253,7 +268,6 @@ app.get("/api/logo-header", (req, res) => {
   }
 });
 
-// Endpoint para obtener el logo del pie
 app.get("/api/logo-footer", (req, res) => {
   const { footerPath } = resolveLogoPathsFromConfig();
   if (fs.existsSync(footerPath)) {
@@ -263,7 +277,6 @@ app.get("/api/logo-footer", (req, res) => {
   }
 });
 
-// Endpoint para subir logo de encabezado (actualiza config.assets.logoHeader.path)
 app.post("/api/upload-logo-header", upload.single("logo"), async (req, res) => {
   try {
     if (!req.file) {
@@ -273,14 +286,12 @@ app.post("/api/upload-logo-header", upload.single("logo"), async (req, res) => {
     const { headerPath } = resolveLogoPathsFromConfig();
     fs.mkdirSync(path.dirname(headerPath), { recursive: true });
 
-    // Procesar la imagen con sharp para optimizarla para impresoras térmicas
     await sharp(req.file.buffer)
-      .resize({ width: 600, fit: "inside" }) // Ancho para logo de encabezado
-      .greyscale() // Convertir a escala de grises
+      .resize({ width: 600, fit: "inside" })
+      .greyscale()
       .png()
       .toFile(headerPath);
 
-    // Actualizar config con ruta versionada por cliente
     const cfg = readConfigSafe();
     const rel = path.relative(ROOT_DIR, headerPath).replace(/\\/g, "/");
     cfg.assets.logoHeader = {
@@ -303,7 +314,6 @@ app.post("/api/upload-logo-header", upload.single("logo"), async (req, res) => {
   }
 });
 
-// Endpoint para subir logo de pie (actualiza config.assets.logoFooter.path)
 app.post("/api/upload-logo-footer", upload.single("logo"), async (req, res) => {
   try {
     if (!req.file) {
@@ -313,14 +323,12 @@ app.post("/api/upload-logo-footer", upload.single("logo"), async (req, res) => {
     const { footerPath } = resolveLogoPathsFromConfig();
     fs.mkdirSync(path.dirname(footerPath), { recursive: true });
 
-    // Procesar la imagen con sharp para optimizarla para impresoras térmicas
     await sharp(req.file.buffer)
-      .resize({ width: 200, fit: "inside" }) // Ancho más pequeño para el pie
-      .greyscale() // Convertir a escala de grises
+      .resize({ width: 200, fit: "inside" })
+      .greyscale()
       .png()
       .toFile(footerPath);
 
-    // Actualizar config con ruta versionada por cliente
     const cfg = readConfigSafe();
     const rel = path.relative(ROOT_DIR, footerPath).replace(/\\/g, "/");
     cfg.assets.logoFooter = {
@@ -343,14 +351,12 @@ app.post("/api/upload-logo-footer", upload.single("logo"), async (req, res) => {
   }
 });
 
-// Endpoint para eliminar logo de encabezado
 app.delete("/api/logo-header", (req, res) => {
   try {
     const { headerPath } = resolveLogoPathsFromConfig();
     const exists = fs.existsSync(headerPath);
     if (exists) fs.unlinkSync(headerPath);
 
-    // Si eliminamos el actual, dejar flag en false pero mantenemos assets.* por historial si querés
     const cfg = readConfigSafe();
     cfg.useHeaderLogo = false;
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
@@ -368,7 +374,6 @@ app.delete("/api/logo-header", (req, res) => {
   }
 });
 
-// Endpoint para eliminar logo de pie
 app.delete("/api/logo-footer", (req, res) => {
   try {
     const { footerPath } = resolveLogoPathsFromConfig();
@@ -394,140 +399,60 @@ app.delete("/api/logo-footer", (req, res) => {
 
 // ------------------------- IMPRESIÓN -------------------------
 
-// Endpoint para imprimir plantillas (soporta impresión por lotes)
-app.post("/api/imprimir", (req, res) => {
+// Endpoint para imprimir (usa QueueManager)
+app.post("/api/imprimir", async (req, res) => {
   const data = req.body;
   const templateId = data.templateId || "receipt";
 
   console.log(`📦 Recibido trabajo de impresión con plantilla: ${templateId}`);
 
   try {
-    const queueDir = path.join(ROOT_DIR, "print-queue");
+    // Validar con el sistema de templates
+    const templates = require("../src/templates");
+    const validacion = templates.validarDatosParaPlantilla(templateId, data);
 
-    // Crear directorio de cola si no existe
-    if (!fs.existsSync(queueDir)) {
-      fs.mkdirSync(queueDir, { recursive: true });
+    if (!validacion.valid) {
+      return res.status(400).json({
+        error: "Datos inválidos para la plantilla",
+        details: `Campos faltantes: ${validacion.missingFields.join(", ")}`,
+      });
     }
 
-    // Comprobar si es una impresión por lotes
-    const isBatchPrint =
-      Array.isArray(data.products) && data.products.length > 0;
+    // Generar ID único para el trabajo
+    const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    if (isBatchPrint) {
-      console.log(
-        `🔄 Procesando impresión por lotes de ${data.products.length} productos`
-      );
+    // Preparar datos para imprimir
+    const datosParaImprimir = {
+      ...data,
+      _templateInfo: {
+        id: templateId,
+        timestamp: new Date().toISOString(),
+        jobId,
+      },
+    };
 
-      // Validar cada producto en el lote
-      const templates = require("../src/templates");
-      const invalidProducts = [];
+    // Encolar usando QueueManager
+    const result = await queueManager.enqueue(jobId, datosParaImprimir);
 
-      // Creamos un array para guardar los trabajos de impresión
-      const printJobs = data.products.map((product, index) => {
-        const jobId = `${Date.now()}-${Math.random()
-          .toString(36)
-          .substr(2, 9)}-${index}`;
+    if (result.success) {
+      console.log(`✅ Job ${jobId} encolado. Posición: ${result.position}`);
 
-        // Create data object for each product
-        const productData = {
-          templateId: templateId,
-          productName: product.productName,
-          price: product.price,
-          _templateInfo: {
-            id: templateId,
-            timestamp: new Date().toISOString(),
-            batchId: `batch-${Date.now()}`,
-            jobId,
-            index: index,
-            total: data.products.length,
-          },
-        };
+      // NO tocar config.json aquí - el watcher ya no es necesario
+      // El worker lee directamente los archivos de la cola
 
-        // Solo añadir header si existe y tiene un valor no vacío
-        if (product.header && product.header.trim() !== "") {
-          productData.header = product.header;
-        }
-
-        // Validate data against template
-        const validacion = templates.validarDatosParaPlantilla(
-          templateId,
-          productData
-        );
-        if (!validacion.valid) {
-          invalidProducts.push({
-            index,
-            productName: product.productName,
-            errors: validacion.missingFields,
-          });
-        }
-
-        return { jobId, data: productData };
-      });
-
-      // Si hay productos inválidos, retornar error
-      if (invalidProducts.length > 0) {
-        return res.status(400).json({
-          error: "Datos inválidos para algunos productos",
-          details: invalidProducts,
-        });
-      }
-
-      // Guardar cada trabajo en un archivo separado
-      printJobs.forEach(({ jobId, data }) => {
-        const jobPath = path.join(queueDir, `${jobId}.json`);
-        fs.writeFileSync(jobPath, JSON.stringify(data, null, 2));
-      });
-
-      // Tocar el archivo config.json para desencadenar el watcher del conector
-      const configContent = readConfigSafe();
-      fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
-
-      console.log(
-        `✅ ${printJobs.length} trabajos de impresión por lotes encolados`
-      );
-      res.json({
-        success: true,
-        message: `${printJobs.length} trabajos encolados correctamente`,
-        jobIds: printJobs.map((j) => j.jobId),
-      });
-    } else {
-      // Impresión individual
-      const templates = require("../src/templates");
-      const validacion = templates.validarDatosParaPlantilla(templateId, data);
-
-      if (!validacion.valid) {
-        return res.status(400).json({
-          error: "Datos inválidos para la plantilla",
-          details: `Campos faltantes: ${validacion.missingFields.join(", ")}`,
-        });
-      }
-
-      // Generar ID único para el trabajo
-      const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const jobPath = path.join(queueDir, `${jobId}.json`);
-
-      // Guardar trabajo en la cola
-      const datosParaImprimir = {
-        ...data,
-        _templateInfo: {
-          id: templateId,
-          timestamp: new Date().toISOString(),
-          jobId,
-        },
-      };
-
-      fs.writeFileSync(jobPath, JSON.stringify(datosParaImprimir, null, 2));
-
-      // Tocar config.json para desencadenar el watcher
-      const configContent = readConfigSafe();
-      fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
-
-      console.log(`✅ Trabajo ${jobId} encolado correctamente`);
       res.json({
         success: true,
         message: "Trabajo encolado correctamente",
-        jobId,
+        jobId: result.jobId,
+        queueSnapshot: {
+          position: result.position,
+          total: result.total,
+          pending: queueManager.state.pending.length,
+          processing: queueManager.state.processing.length,
+        },
       });
+    } else {
+      throw new Error(result.error || "Error al encolar");
     }
   } catch (err) {
     console.error(`❌ Error al procesar solicitud de impresión:`, err);
@@ -538,37 +463,50 @@ app.post("/api/imprimir", (req, res) => {
   }
 });
 
-// Endpoint para obtener estado de la cola de impresión
+// Endpoint para obtener estado de la cola
 app.get("/api/print-queue/status", (req, res) => {
   try {
-    const queueDir = path.join(ROOT_DIR, "print-queue");
-    const processingDir = path.join(ROOT_DIR, "print-processing");
-
-    let pending = 0;
-    let processing = 0;
-
-    if (fs.existsSync(queueDir)) {
-      pending = fs
-        .readdirSync(queueDir)
-        .filter((f) => f.endsWith(".json")).length;
-    }
-
-    if (fs.existsSync(processingDir)) {
-      processing = fs
-        .readdirSync(processingDir)
-        .filter((f) => f.endsWith(".json")).length;
-    }
-
-    res.json({
-      pending,
-      processing,
-      total: pending + processing,
-    });
+    const snapshot = queueManager.getSnapshot();
+    res.json(snapshot);
   } catch (err) {
     res.status(500).json({
       error: "Error al obtener estado de cola",
       details: err.message,
     });
+  }
+});
+
+// Endpoint para que el worker notifique completado
+app.post("/api/job-completed", (req, res) => {
+  try {
+    const { jobId } = req.body;
+
+    if (!jobId) {
+      return res.status(400).json({ error: "jobId requerido" });
+    }
+
+    queueManager.markCompleted(jobId);
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint para que el worker notifique fallo
+app.post("/api/job-failed", (req, res) => {
+  try {
+    const { jobId, error } = req.body;
+
+    if (!jobId) {
+      return res.status(400).json({ error: "jobId requerido" });
+    }
+
+    queueManager.markFailed(jobId, error);
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -579,7 +517,6 @@ app.get("/", (req, res) => {
 
 // ------------------------- FUENTES -------------------------
 
-// Endpoint para subir una fuente personalizada
 app.post("/api/upload-font", upload.single("font"), async (req, res) => {
   try {
     if (!req.file) {
@@ -588,26 +525,20 @@ app.post("/api/upload-font", upload.single("font"), async (req, res) => {
         .json({ error: "No se recibió ningún archivo de fuente" });
     }
 
-    // Verificar la extensión del archivo
     if (!req.file.originalname.toLowerCase().endsWith(".ttf")) {
       return res.status(400).json({
         error: "Formato de archivo no válido. Solo se permiten archivos TTF",
       });
     }
 
-    // Cargar la configuración para obtener el ID del cliente
     const config = readConfigSafe();
     const clienteId = config.clienteId || "cliente-default";
 
-    // Guardar temporalmente el archivo
     const tempPath = path.join(ROOT_DIR, "temp-font.ttf");
     fs.writeFileSync(tempPath, req.file.buffer);
 
-    // Registrar la fuente
     try {
       await fontRenderer.registrarFuente(clienteId, tempPath);
-
-      // Eliminar el archivo temporal
       fs.unlinkSync(tempPath);
 
       res.json({
@@ -630,14 +561,10 @@ app.post("/api/upload-font", upload.single("font"), async (req, res) => {
   }
 });
 
-// Endpoint para obtener información de la fuente actual
 app.get("/api/font-info", (req, res) => {
   try {
-    // Cargar la configuración para obtener el ID del cliente
     const config = readConfigSafe();
     const clienteId = config.clienteId || "cliente-default";
-
-    // Obtener información de la fuente
     const fontInfo = fontRenderer.obtenerInfoFuente(clienteId);
 
     res.json({
@@ -653,16 +580,12 @@ app.get("/api/font-info", (req, res) => {
   }
 });
 
-// Endpoint para previsualizar texto con la fuente personalizada
 app.get("/api/font-preview", async (req, res) => {
   try {
     const text = req.query.text || "Texto de ejemplo";
-
-    // Cargar la configuración para obtener el ID del cliente
     const config = readConfigSafe();
     const clienteId = config.clienteId || "cliente-default";
 
-    // Verificar que exista información de la fuente
     const fontInfo = fontRenderer.obtenerInfoFuente(clienteId);
     if (!fontInfo) {
       return res
@@ -670,14 +593,12 @@ app.get("/api/font-preview", async (req, res) => {
         .json({ error: "No hay fuente personalizada configurada" });
     }
 
-    // Generar imagen con la fuente
     const imageBuffer = await fontRenderer.textoAImagen(clienteId, text, {
       fontSize: 28,
       centerText: true,
       backgroundColor: "#FFFFFF",
     });
 
-    // Enviar imagen
     res.set("Content-Type", "image/png");
     res.send(imageBuffer);
   } catch (err) {
@@ -689,17 +610,13 @@ app.get("/api/font-preview", async (req, res) => {
   }
 });
 
-// Endpoint para eliminar una fuente
 app.delete("/api/delete-font", (req, res) => {
   try {
-    // Cargar la configuración para obtener el ID del cliente
     const config = readConfigSafe();
     const clienteId = config.clienteId || "cliente-default";
 
-    // Eliminar la fuente
     const deleted = fontRenderer.eliminarFuente(clienteId);
 
-    // Actualizar la configuración
     config.useFontTicket = false;
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
@@ -718,7 +635,6 @@ app.delete("/api/delete-font", (req, res) => {
   }
 });
 
-// Limpiar caché de fuentes periódicamente (cada 24 horas)
 setInterval(() => {
   try {
     fontCache.limpiarCache();
@@ -730,7 +646,6 @@ setInterval(() => {
 
 // ------------------------- PLANTILLAS -------------------------
 
-// Endpoint para obtener todas las plantillas
 app.get("/api/templates", (req, res) => {
   try {
     const templates = templateSystem.obtenerTodasLasPlantillas();
@@ -744,7 +659,6 @@ app.get("/api/templates", (req, res) => {
   }
 });
 
-// Endpoint para obtener una plantilla específica
 app.get("/api/templates/:id", (req, res) => {
   try {
     const templateId = req.params.id;
@@ -767,7 +681,6 @@ app.get("/api/templates/:id", (req, res) => {
   }
 });
 
-// Endpoint para crear o actualizar una plantilla
 app.post("/api/templates", (req, res) => {
   try {
     const template = req.body;
@@ -802,7 +715,6 @@ app.post("/api/templates", (req, res) => {
   }
 });
 
-// Endpoint para eliminar una plantilla
 app.delete("/api/templates/:id", (req, res) => {
   try {
     const templateId = req.params.id;
@@ -828,15 +740,7 @@ app.delete("/api/templates/:id", (req, res) => {
   }
 });
 
-/* ============================================================
-   Assets Ingest - Genérico (URL Firebase o Upload directo)
-   POST /api/assets/import
-   - JSON: { clienteId, kind, source: { type:"url", url } }
-   - multipart/form-data: fields clienteId, kind, file
-   kinds soportados: "logo-header" | "logo-footer" | "font-ttf"
-   ============================================================ */
-
-// Allowlist de dominios para descarga remota
+// Assets import (manteniendo funcionalidad existente)
 const ALLOWED_HOSTS = new Set([
   "firebasestorage.googleapis.com",
   "firebasestorage.app",
@@ -888,10 +792,9 @@ async function downloadWithValidation(fileUrl, expectedKind) {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000); // 15s
+  const timeout = setTimeout(() => controller.abort(), 15000);
   let resp;
   try {
-    // Node 18+ trae fetch global
     resp = await fetch(fileUrl, { signal: controller.signal });
   } catch (e) {
     throw new Error(`No se pudo descargar el asset (${e.message})`);
@@ -904,7 +807,6 @@ async function downloadWithValidation(fileUrl, expectedKind) {
   const contentType = resp.headers.get("content-type") || "";
   const buf = Buffer.from(await resp.arrayBuffer());
 
-  // Validaciones simples por tipo
   if (expectedKind === "font-ttf") {
     if (
       !/font\/ttf|application\/octet-stream/.test(contentType) &&
@@ -964,7 +866,6 @@ function assetKeyByKind(kind) {
 
 app.post("/api/assets/import", upload.single("file"), async (req, res) => {
   try {
-    // 1) Leer config y clienteId
     const cfg = readJSONSafe(configPath, {});
     const body = req.body || {};
     const clienteId = (body.clienteId || cfg.clienteId || "cliente-default")
@@ -978,7 +879,6 @@ app.post("/api/assets/import", upload.single("file"), async (req, res) => {
         .json({ error: "Falta 'kind' (logo-header|logo-footer|font-ttf)" });
     }
 
-    // 2) Obtener buffer: o de URL (JSON) o de upload (multipart)
     let buffer = null;
     let sourceType = null;
 
@@ -1014,17 +914,14 @@ app.post("/api/assets/import", upload.single("file"), async (req, res) => {
       buffer = buf;
     }
 
-    // 3) Procesar según tipo
     const finalPath = resolveAssetPaths(clienteId, kind);
     let toWrite = buffer;
     let extraConfig = {};
 
     if (kind === "logo-header" || kind === "logo-footer") {
       toWrite = await processLogo(buffer, kind);
-      // Escribir atomically
       writeAtomic(finalPath, toWrite);
 
-      // 4) Actualizar config, flags y version
       const cfgNow = readJSONSafe(configPath, {});
       applyConfigFlagsByKind(cfgNow, kind);
       const rel = path.relative(ROOT_DIR, finalPath).replace(/\\/g, "/");
@@ -1034,7 +931,6 @@ app.post("/api/assets/import", upload.single("file"), async (req, res) => {
       bumpAssetVersion(cfgNow, key, { path: rel, sha256: hash });
 
       fs.writeFileSync(configPath, JSON.stringify(cfgNow, null, 2));
-      fs.writeFileSync(configPath, JSON.stringify(cfgNow, null, 2)); // toque para watcher (si aplica)
 
       return res.json({
         success: true,
@@ -1049,13 +945,10 @@ app.post("/api/assets/import", upload.single("file"), async (req, res) => {
     }
 
     if (kind === "font-ttf") {
-      // Guardar TTF atómicamente
       writeAtomic(finalPath, buffer);
 
-      // Registrar/validar fuente con tu pipeline existente
       await fontRenderer.registrarFuente(clienteId, finalPath);
 
-      // Info de fuente (family, etc.)
       const info = fontRenderer.obtenerInfoFuente(clienteId) || {};
       extraConfig.family = info.family || info.fontFamily || undefined;
       extraConfig.sha256 = sha256(buffer);
@@ -1067,7 +960,6 @@ app.post("/api/assets/import", upload.single("file"), async (req, res) => {
         ...extraConfig,
       });
       fs.writeFileSync(configPath, JSON.stringify(cfgNow, null, 2));
-      fs.writeFileSync(configPath, JSON.stringify(cfgNow, null, 2)); // toque para watcher
 
       return res.json({
         success: true,
@@ -1084,13 +976,14 @@ app.post("/api/assets/import", upload.single("file"), async (req, res) => {
 
     throw new Error(`kind no soportado: ${kind}`);
   } catch (err) {
-    console.error("❌ Error en /api/assets/import:", err);
+    console.error("Error en /api/assets/import:", err);
     const code = err.code || "INGEST_ERROR";
     res.status(400).json({ error: code, details: err.message });
   }
 });
 
-// Iniciar el servidor
-app.listen(PORT, () => {
-  console.log(`🛠️ Config UI corriendo en http://localhost:${PORT}`);
+// Iniciar el servidor con Socket.IO
+server.listen(PORT, () => {
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`WebSocket escuchando conexiones`);
 });

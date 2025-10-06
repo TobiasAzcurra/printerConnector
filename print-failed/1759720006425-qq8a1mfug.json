@@ -1,0 +1,34 @@
+{
+  "templateId": "receipt",
+  "detallePedido": [
+    {
+      "nombre": "Doble cheeseburger",
+      "cantidad": 1,
+      "precio": 15100,
+      "aclaraciones": "",
+      "modifiers": "Mayonesa"
+    },
+    {
+      "nombre": "Doble cheeseburger",
+      "cantidad": 1,
+      "precio": 15100,
+      "aclaraciones": "",
+      "modifiers": ""
+    }
+  ],
+  "subTotal": 30200,
+  "envio": 3000,
+  "descuentos": 15100,
+  "total": 18100,
+  "metodoPago": "Efectivo",
+  "telefono": "3584309224",
+  "direccion": "San martín 337",
+  "deliveryNotes": "Depto 7b",
+  "aclaraciones": "Una sin mayonesa",
+  "hora": "22:09",
+  "_templateInfo": {
+    "id": "receipt",
+    "timestamp": "2025-10-06T03:06:46.425Z",
+    "jobId": "1759720006425-qq8a1mfug"
+  }
+}
