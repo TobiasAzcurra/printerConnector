@@ -18,15 +18,17 @@ async function renderizarTexto(clienteId, texto, options = {}) {
     return null;
   }
 
-  const cacheKey = fontCache.generarClaveCaching(clienteId, texto, options);
+  // fontVersion identifica el directorio de caché — se extrae antes de hashear
+  const { fontVersion = "default", ...renderOptions } = options;
+  const cacheKey = fontCache.generarClaveCaching(clienteId, texto, renderOptions);
 
-  if (fontCache.existeEnCache(cacheKey)) {
+  if (fontCache.existeEnCache(fontVersion, cacheKey)) {
     console.log(
       `🔍 Usando caché para "${texto.substring(0, 20)}${
         texto.length > 20 ? "..." : ""
       }"`
     );
-    return fontCache.obtenerDeCache(cacheKey);
+    return fontCache.obtenerDeCache(fontVersion, cacheKey);
   }
 
   console.log(
@@ -42,7 +44,7 @@ async function renderizarTexto(clienteId, texto, options = {}) {
       const lines = texto.split("\n").filter((line) => line.trim());
 
       const lineBuffers = await Promise.all(
-        lines.map((line) => fontRenderer.textoAImagen(clienteId, line, options))
+        lines.map((line) => fontRenderer.textoAImagen(clienteId, line, renderOptions))
       );
 
       const lineMetas = await Promise.all(
@@ -60,7 +62,7 @@ async function renderizarTexto(clienteId, texto, options = {}) {
         const op = {
           input: buf,
           top: currentY,
-          left: options.centerText
+          left: renderOptions.centerText
             ? Math.floor((maxWidth - lineMetas[i].width) / 2)
             : 0,
         };
@@ -80,7 +82,7 @@ async function renderizarTexto(clienteId, texto, options = {}) {
         .png()
         .toBuffer();
 
-      fontCache.guardarEnCache(cacheKey, imageBuffer);
+      fontCache.guardarEnCache(fontVersion, cacheKey, imageBuffer);
       return imageBuffer;
     }
 
@@ -88,10 +90,10 @@ async function renderizarTexto(clienteId, texto, options = {}) {
     const imageBuffer = await fontRenderer.textoAImagen(
       clienteId,
       texto,
-      options
+      renderOptions
     );
 
-    fontCache.guardarEnCache(cacheKey, imageBuffer);
+    fontCache.guardarEnCache(fontVersion, cacheKey, imageBuffer);
     return imageBuffer;
   } catch (err) {
     console.error(`❌ Error al renderizar texto: ${err.message}`);

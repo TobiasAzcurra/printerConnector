@@ -57,6 +57,9 @@ async function printText(printer, text, style = {}, config, useFontTicket) {
         fontSize,
         centerText: align === "center",
         bold,
+        // Incluir sha de la fuente en el cache key: si cambia la fuente,
+        // cambia la clave y se ignoran los PNG viejos automáticamente.
+        fontVersion: config.assets?.font?.sha256 || "default",
       });
       await imprimirImagenBuffer(printer, buffer);
     } catch (err) {

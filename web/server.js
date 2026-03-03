@@ -531,6 +531,11 @@ app.post("/api/upload-font", upload.single("font"), async (req, res) => {
       await fontRenderer.registrarFuente(clienteId, tempPath);
       fs.unlinkSync(tempPath);
 
+      // Evictar caché de fuentes anteriores — borra subdirectorios viejos,
+      // deja intacto el de la fuente recién subida (si ya existía alguna entrada)
+      const newFontInfo = fontRenderer.obtenerInfoFuente(clienteId);
+      fontCache.evictarFuentesAnteriores(newFontInfo?.sha256 || "");
+
       res.json({
         success: true,
         message: "Fuente subida y procesada correctamente",

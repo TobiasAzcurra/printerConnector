@@ -2,7 +2,6 @@
 const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
-const io = require("socket.io-client");
 const printerRenderer = require("./src/printer-renderer");
 
 const ROOT_DIR = __dirname;
@@ -14,7 +13,6 @@ const processingDir = path.join(ROOT_DIR, "print-processing");
 const API_BASE = "http://localhost:4040";
 
 let config = {};
-let socket = null;
 let isProcessingQueue = false;
 
 /* ==========================
@@ -125,30 +123,6 @@ function diagnosticarRed(ip) {
 }
 
 /* ==========================
-   Socket backend
-   ========================== */
-function conectarBackend() {
-  if (socket) socket.disconnect();
-
-  socket = io("http://localhost:4000");
-
-  socket.on("connect", () => {
-    console.log("Conectado al backend como:", config.clienteId);
-    socket.emit("register", { clienteId: config.clienteId });
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Desconectado del backend. Intentando reconectar...");
-  });
-
-  socket.on("connect_error", (error) => {
-    console.log("Error de conexión con el backend:", error.message);
-  });
-
-  socket.on("imprimir", handleImpresion);
-}
-
-/* ==========================
    Impresión de confirmación
    ========================== */
 function logoABase64(rutaRelativa) {
@@ -198,7 +172,6 @@ async function reiniciarConector(skipConfirmationPrint = false) {
   console.log("Recargando configuración...");
   cargarConfig();
   diagnosticarRed(config.printerIP);
-  conectarBackend();
 
   const hayTrabajosPendientes =
     fs.existsSync(queueDir) &&
