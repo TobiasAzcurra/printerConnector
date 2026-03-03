@@ -105,7 +105,6 @@ function readConfigSafe() {
       clienteId: "cliente-default",
       printerIP: "",
       printerPort: 9100,
-      businessName: "Mi Negocio",
       ticketWidth: 48,
       useHeaderLogo: true,
       useFooterLogo: true,
@@ -123,7 +122,6 @@ function readConfigSafe() {
   if (config.ticketWidth === undefined) config.ticketWidth = 48;
   if (config.useFontTicket === undefined) config.useFontTicket = false;
   if (!config.printerPort) config.printerPort = 9100;
-  if (!config.businessName) config.businessName = "Mi Negocio";
   if (!config.assets) config.assets = {};
 
   if (config.useLogo !== undefined && config.useHeaderLogo === undefined) {

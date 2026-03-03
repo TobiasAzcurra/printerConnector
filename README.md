@@ -4,6 +4,31 @@ Este conector corre en la máquina del cliente junto a la impresora térmica. Su
 
 ---
 
+## Setup (nueva instalación)
+
+```bash
+# 1. Clonar el repo
+git clone <url-del-repo>
+cd printerConnector
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Crear la configuración local
+cp config.example.json config.json
+# Editar config.json con la IP de la impresora y el clienteId correspondiente
+
+# 4. Levantar los dos procesos (en terminales separadas)
+node web/server.js   # Panel de configuración → http://localhost:4040
+node index.js        # Conector principal (imprime ticket de confirmación al arrancar)
+```
+
+> **Requisitos:** Node.js 18+. La impresora debe estar en la misma red local y accesible por TCP en el puerto configurado (default: 9100).
+
+Una vez levantado, la configuración (IP, logos, fuente TTF) se gestiona desde el panel web en `conabsolute.com`.
+
+---
+
 ## Cómo enviar un job
 
 ### Opción A — HTTP REST (recomendada para producción)
