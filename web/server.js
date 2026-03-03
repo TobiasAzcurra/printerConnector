@@ -13,7 +13,7 @@ const { Server } = require("socket.io");
 const fontRenderer = require("../src/font-renderer");
 const fontCache = require("../src/font-renderer/cache");
 const textRenderer = require("../src/font-renderer/text-renderer");
-const templateSystem = require("../src/templates");
+const { validarDatosParaPlantilla } = require("../src/templates");
 const QueueManager = require("../src/queue-manager");
 
 const app = express();
@@ -402,44 +402,34 @@ app.delete("/api/logo-footer", (req, res) => {
 // Endpoint para imprimir (usa QueueManager)
 app.post("/api/imprimir", async (req, res) => {
   const data = req.body;
-  const templateId = data.templateId || "receipt";
+  const template = data._template;
 
-  console.log(`📦 Recibido trabajo de impresión con plantilla: ${templateId}`);
+  // Validar que el payload traiga un template con sections
+  const validacion = validarDatosParaPlantilla(template);
+
+  if (!validacion.valid) {
+    return res.status(400).json({
+      error: "Payload invalido",
+      details: `Campos faltantes o invalidos: ${validacion.missingFields.join(", ")}`,
+      hint: "El payload debe incluir _template.sections con tipo text, image o spacer",
+    });
+  }
 
   try {
-    // Validar con el sistema de templates
-    const templates = require("../src/templates");
-    const validacion = templates.validarDatosParaPlantilla(templateId, data);
-
-    if (!validacion.valid) {
-      return res.status(400).json({
-        error: "Datos inválidos para la plantilla",
-        details: `Campos faltantes: ${validacion.missingFields.join(", ")}`,
-      });
-    }
-
-    // Generar ID único para el trabajo
     const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Preparar datos para imprimir
     const datosParaImprimir = {
       ...data,
       _templateInfo: {
-        id: templateId,
+        id: data._templateInfo?.id || "custom",
         timestamp: new Date().toISOString(),
         jobId,
       },
     };
 
-    // Encolar usando QueueManager
     const result = await queueManager.enqueue(jobId, datosParaImprimir);
 
     if (result.success) {
-      console.log(`✅ Job ${jobId} encolado. Posición: ${result.position}`);
-
-      // NO tocar config.json aquí - el watcher ya no es necesario
-      // El worker lee directamente los archivos de la cola
-
       res.json({
         success: true,
         message: "Trabajo encolado correctamente",
@@ -455,9 +445,9 @@ app.post("/api/imprimir", async (req, res) => {
       throw new Error(result.error || "Error al encolar");
     }
   } catch (err) {
-    console.error(`❌ Error al procesar solicitud de impresión:`, err);
+    console.error("Error al procesar solicitud de impresion:", err);
     res.status(500).json({
-      error: "Error al procesar la solicitud de impresión",
+      error: "Error al procesar la solicitud de impresion",
       details: err.message,
     });
   }
@@ -644,101 +634,7 @@ setInterval(() => {
   }
 }, 24 * 60 * 60 * 1000);
 
-// ------------------------- PLANTILLAS -------------------------
 
-app.get("/api/templates", (req, res) => {
-  try {
-    const templates = templateSystem.obtenerTodasLasPlantillas();
-    res.json(templates);
-  } catch (err) {
-    console.error("❌ Error al obtener plantillas:", err);
-    res.status(500).json({
-      error: "Error al obtener plantillas",
-      details: err.message,
-    });
-  }
-});
-
-app.get("/api/templates/:id", (req, res) => {
-  try {
-    const templateId = req.params.id;
-    const template = templateSystem.obtenerPlantilla(templateId);
-
-    if (!template) {
-      return res.status(404).json({
-        error: "Plantilla no encontrada",
-        details: `No existe una plantilla con ID: ${templateId}`,
-      });
-    }
-
-    res.json(template);
-  } catch (err) {
-    console.error(`❌ Error al obtener plantilla ${req.params.id}:`, err);
-    res.status(500).json({
-      error: "Error al obtener plantilla",
-      details: err.message,
-    });
-  }
-});
-
-app.post("/api/templates", (req, res) => {
-  try {
-    const template = req.body;
-
-    if (!template || !template.id) {
-      return res.status(400).json({
-        error: "Datos de plantilla inválidos",
-        details: "Se requiere al menos un ID de plantilla",
-      });
-    }
-
-    const saved = templateSystem.guardarPlantilla(template);
-
-    if (saved) {
-      res.json({
-        success: true,
-        message: `Plantilla ${template.id} guardada correctamente`,
-        template,
-      });
-    } else {
-      res.status(500).json({
-        error: "Error al guardar plantilla",
-        details: "No se pudo guardar la plantilla",
-      });
-    }
-  } catch (err) {
-    console.error("❌ Error al guardar plantilla:", err);
-    res.status(500).json({
-      error: "Error al guardar plantilla",
-      details: err.message,
-    });
-  }
-});
-
-app.delete("/api/templates/:id", (req, res) => {
-  try {
-    const templateId = req.params.id;
-    const deleted = templateSystem.eliminarPlantilla(templateId);
-
-    if (deleted) {
-      res.json({
-        success: true,
-        message: `Plantilla ${templateId} eliminada correctamente`,
-      });
-    } else {
-      res.status(404).json({
-        error: "Plantilla no encontrada",
-        details: `No existe una plantilla con ID: ${templateId}`,
-      });
-    }
-  } catch (err) {
-    console.error(`❌ Error al eliminar plantilla ${req.params.id}:`, err);
-    res.status(500).json({
-      error: "Error al eliminar plantilla",
-      details: err.message,
-    });
-  }
-});
 
 // Assets import (manteniendo funcionalidad existente)
 const ALLOWED_HOSTS = new Set([

@@ -3,17 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
 const io = require("socket.io-client");
-const {
-  printer: ThermalPrinter,
-  types: PrinterTypes,
-} = require("node-thermal-printer");
-
-const fontRenderer = require("./src/font-renderer");
-const fontCache = require("./src/font-renderer/cache");
-const textRenderer = require("./src/font-renderer/text-renderer");
-const templateSystem = require("./src/templates");
 const printerRenderer = require("./src/printer-renderer");
-const { printHeaderLogo, printFooterLogo } = require("./src/print-logos");
 
 const ROOT_DIR = __dirname;
 const configPath = path.join(ROOT_DIR, "config.json");
@@ -161,96 +151,43 @@ function conectarBackend() {
 /* ==========================
    Impresión de confirmación
    ========================== */
+function logoABase64(rutaRelativa) {
+  const rutaAbsoluta = path.join(ROOT_DIR, rutaRelativa);
+  if (!fs.existsSync(rutaAbsoluta)) return null;
+  const data = fs.readFileSync(rutaAbsoluta).toString("base64");
+  return "data:image/png;base64," + data;
+}
+
 async function imprimirConfirmacion() {
-  const printer = new ThermalPrinter({
-    type: PrinterTypes.EPSON,
-    interface: `tcp://${config.printerIP}:${config.printerPort}`,
-    width: config.ticketWidth || 48,
-    removeSpecialCharacters: false,
-    lineCharacter: "-",
-    encoding: "utf8",
-  });
+  const sections = [];
 
-  const isConnected = await printer.isPrinterConnected();
-  console.log("Verificando conexión con impresora:", isConnected);
-  if (!isConnected) {
-    console.log("No se pudo imprimir confirmación (impresora no conectada)");
-    return;
+  if (config.useHeaderLogo && config.assets?.logoHeader?.path) {
+    const src = logoABase64(config.assets.logoHeader.path);
+    if (src) sections.push({ type: "image", src });
   }
+
+  sections.push({ type: "spacer" });
+  sections.push({ type: "text", text: "Impresora conectada correctamente", style: { align: "center", fontSize: 28, bold: true } });
+  sections.push({ type: "spacer" });
+
+  if (config.useFooterLogo && config.assets?.logoFooter?.path) {
+    const src = logoABase64(config.assets.logoFooter.path);
+    if (src) sections.push({ type: "image", src });
+  }
+
+  sections.push({ type: "spacer" });
+  sections.push({ type: "text", text: "Impulsado por Absolute.", style: { align: "center", fontSize: 24 } });
+
+  const job = {
+    _templateInfo: { id: "confirmacion", jobId: "confirmacion-" + Date.now() },
+    _template: { sections },
+  };
 
   try {
-    await printHeaderLogo(printer, config);
-  } catch (e) {
-    console.warn("No se pudo imprimir header logo:", e.message);
-  }
-
-  printer.newLine();
-  printer.newLine();
-
-  if (config.useFontTicket) {
-    try {
-      const fontInfo = fontRenderer.obtenerInfoFuente(config.clienteId);
-      if (fontInfo) {
-        const imagen = await textRenderer.renderizarTexto(
-          config.clienteId,
-          "Impresora conectada correctamente",
-          { fontSize: 28, centerText: true, backgroundColor: "#FFFFFF" }
-        );
-        printer.alignCenter();
-        await imprimirImagenTexto(printer, imagen);
-      } else {
-        printer.alignCenter();
-        printer.bold(true);
-        printer.println("Impresora conectada correctamente");
-      }
-    } catch (err) {
-      console.error("Error con fuente personalizada:", err.message);
-      printer.alignCenter();
-      printer.bold(true);
-      printer.println("Impresora conectada correctamente");
-    }
-  } else {
-    printer.alignCenter();
-    printer.bold(true);
-    printer.println("Impresora conectada correctamente");
-  }
-
-  printer.newLine();
-
-  try {
-    await printFooterLogo(printer, config);
-  } catch (e) {
-    console.warn("No se pudo imprimir footer logo:", e.message);
-  }
-
-  if (config.useFontTicket) {
-    try {
-      const fontInfo = fontRenderer.obtenerInfoFuente(config.clienteId);
-      if (fontInfo) {
-        const img = await textRenderer.renderizarTexto(
-          config.clienteId,
-          "Impulsado por Absolute.",
-          { fontSize: 28, centerText: true, bold: true }
-        );
-        await imprimirImagenTexto(printer, img);
-      } else {
-        printer.println("Impulsado por Absolute.");
-      }
-    } catch (err) {
-      console.error("Error con fuente en pie de confirmación:", err.message);
-      printer.println("Impulsado por Absolute.");
-    }
-  } else {
-    printer.println("Impulsado por Absolute.");
-  }
-
-  printer.cut();
-  try {
-    console.log("Ejecutando impresión de confirmación...");
-    await printer.execute();
-    console.log("Confirmación impresa.");
+    await printerRenderer.imprimirConPlantilla(config, job, job._template);
+    console.log("Confirmacion impresa.");
   } catch (err) {
-    console.error("Error al imprimir confirmación:", err);
+    console.error("Error al imprimir confirmacion:", err.message);
   }
 }
 
@@ -281,15 +218,21 @@ async function handleImpresion(datos) {
   const jobId = datos._templateInfo?.jobId || "Sin ID";
   console.log("Trabajo de impresión recibido:", jobId);
 
-  const templateId = datos._templateInfo?.id || "receipt";
-  console.log(`Usando plantilla: ${templateId}`);
+  const template = datos._template;
+
+  if (!template || !Array.isArray(template.sections)) {
+    console.error(
+      `❌ Job "${jobId}" rechazado: el payload no incluye _template.sections.`
+    );
+    return false;
+  }
+
+  console.log(
+    `📐 Template: ${datos._templateInfo?.id || "sin id"} — ${template.sections.length} secciones`
+  );
 
   try {
-    const ok = await printerRenderer.imprimirConPlantilla(
-      config,
-      datos,
-      templateId
-    );
+    const ok = await printerRenderer.imprimirConPlantilla(config, datos, template);
     if (ok) {
       console.log(`Impresión completada exitosamente: ${jobId}`);
       return true;
