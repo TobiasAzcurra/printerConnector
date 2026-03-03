@@ -124,10 +124,6 @@ function readConfigSafe() {
   if (!config.printerPort) config.printerPort = 9100;
   if (!config.assets) config.assets = {};
 
-  if (config.useLogo !== undefined && config.useHeaderLogo === undefined) {
-    config.useHeaderLogo = config.useLogo;
-  }
-
   return config;
 }
 

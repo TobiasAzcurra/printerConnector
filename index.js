@@ -6,7 +6,6 @@ const printerRenderer = require("./src/printer-renderer");
 
 const ROOT_DIR = __dirname;
 const configPath = path.join(ROOT_DIR, "config.json");
-const tempFontImagePath = path.join(ROOT_DIR, "temp-font-image.png");
 const queueDir = path.join(ROOT_DIR, "print-queue");
 const processingDir = path.join(ROOT_DIR, "print-processing");
 
