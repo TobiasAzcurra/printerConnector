@@ -1,0 +1,11 @@
+{
+  "clienteId": "nombre-del-cliente",
+  "printerIP": "192.168.1.100",
+  "printerPort": 9100,
+  "businessName": "Nombre del Negocio",
+  "ticketWidth": 48,
+  "useHeaderLogo": true,
+  "useFooterLogo": true,
+  "useFontTicket": false,
+  "assets": {}
+}

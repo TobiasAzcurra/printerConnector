@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+
+# Config local (contiene IP y datos del cliente — cada instalacion tiene la suya)
+# Usar config.example.json como base
+config.json
+
+# Assets del cliente — fuentes y logos son especificos de cada instalacion
+assets/fonts/
+assets/logos/
+
+# Cache de imagenes generadas en runtime
+assets/fonts/cache/
+
+# Directorios de runtime
+print-queue/
+print-processing/
+print-failed/
+temp/
+
+# Archivos temporales de Node / OS
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
