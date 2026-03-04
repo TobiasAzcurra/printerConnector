@@ -1,7 +1,7 @@
 // index.js
-const fs = require("fs");
+const fs   = require("fs");
 const path = require("path");
-const { exec } = require("child_process");
+const net  = require("net");
 const printerRenderer = require("./src/printer-renderer");
 
 const ROOT_DIR = __dirname;
@@ -13,22 +13,9 @@ const API_BASE = "http://localhost:4040";
 
 let config = {};
 let isProcessingQueue = false;
+let printerWasOnline  = null; // null=desconocido, false=offline, true=online
 
-/* ==========================
-   Util: imprimir buffer PNG
-   ========================== */
-async function imprimirImagenTexto(printer, imageBuffer) {
-  try {
-    const tmp = `${tempFontImagePath.replace(".png", "")}-${Date.now()}.png`;
-    fs.writeFileSync(tmp, imageBuffer);
-    await printer.printImage(tmp);
-    fs.unlinkSync(tmp);
-    return true;
-  } catch (err) {
-    console.error(`Error al imprimir imagen: ${err.message}`);
-    return false;
-  }
-}
+
 
 /* ==========================
    Cargar configuración
@@ -67,9 +54,7 @@ function cargarConfig() {
     if (config.useFontTicket === undefined) config.useFontTicket = false;
     if (config.ticketWidth === undefined) config.ticketWidth = 48;
     if (!config.assets) config.assets = {};
-    if (config.useLogo !== undefined && config.useHeaderLogo === undefined) {
-      config.useHeaderLogo = config.useLogo;
-    }
+
 
     console.log("Config cargada:", {
       ...config,
@@ -87,38 +72,36 @@ function cargarConfig() {
 }
 
 /* ==========================
-   Diagnóstico de red
+   Verificación TCP de impresora
    ========================== */
-function diagnosticarRed(ip) {
-  console.log("\nEjecutando diagnóstico de conexión con la impresora...\n");
-  const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
-  if (!ipRegex.test(ip)) {
-    console.log("IP inválida:", ip);
-    return;
+function testTcpConnection(ip, port, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    if (!ip) return resolve(false);
+    const socket = new net.Socket();
+    socket.setTimeout(timeoutMs);
+    socket
+      .on("connect", () => { socket.destroy(); resolve(true); })
+      .on("timeout", () => { socket.destroy(); resolve(false); })
+      .on("error",   () => resolve(false))
+      .connect(port || 9100, ip);
+  });
+}
+
+/**
+ * Comprueba si la impresora está disponible por TCP.
+ * Si transiciona de offline/desconocido → online, imprime el ticket de confirmación.
+ */
+async function comprobarImpresora() {
+  const isOnline = await testTcpConnection(config.printerIP, config.printerPort);
+
+  if (isOnline && printerWasOnline !== true) {
+    console.log("Impresora disponible. Imprimiendo ticket de confirmación...");
+    await imprimirConfirmacion();
+  } else if (!isOnline && printerWasOnline === true) {
+    console.log("Impresora desconectada. Esperando reconexión...");
   }
 
-  exec(`ping -n 2 ${ip}`, (error, stdout) => {
-    if (error) {
-      console.log("Error al intentar hacer ping:", error.message);
-      return;
-    }
-
-    if (stdout.includes("Host de destino inaccesible")) {
-      console.log("La impresora NO está accesible en la red.");
-      console.log(
-        "Verificá que esté conectada al router y en la misma red que esta computadora."
-      );
-    } else if (stdout.includes("tiempo de espera agotado")) {
-      console.log("La impresora no respondió al ping. ¿Está encendida?");
-    } else if (
-      stdout.includes("Respuesta desde") ||
-      stdout.includes("bytes=")
-    ) {
-      console.log("Impresora encontrada en la red");
-    } else {
-      console.log("Resultado indeterminado. Revisá conexión e IP.");
-    }
-  });
+  printerWasOnline = isOnline;
 }
 
 /* ==========================
@@ -167,18 +150,14 @@ async function imprimirConfirmacion() {
 /* ==========================
    Reinicio del conector
    ========================== */
-async function reiniciarConector(skipConfirmationPrint = false) {
+async function reiniciarConector() {
   console.log("Recargando configuración...");
   cargarConfig();
-  diagnosticarRed(config.printerIP);
 
-  const hayTrabajosPendientes =
-    fs.existsSync(queueDir) &&
-    fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).length > 0;
-
-  if (!skipConfirmationPrint && !hayTrabajosPendientes) {
-    await imprimirConfirmacion();
-  }
+  // Forzar re-evaluación del estado de la impresora
+  // (imprime confirmación si está disponible, sea al arrancar o al reconectar)
+  printerWasOnline = null;
+  await comprobarImpresora();
 
   processPrintQueue();
 }
@@ -424,7 +403,14 @@ setInterval(() => {
 }, 2000);
 
 /* ==========================
+   Chequeo de impresora cada 15 segundos
+   ========================== */
+setInterval(() => {
+  comprobarImpresora();
+}, 15000);
+
+/* ==========================
    Run
    ========================== */
 crearEstructuraDirectorios();
-reiniciarConector(false);
+reiniciarConector();

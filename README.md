@@ -18,9 +18,20 @@ npm install
 cp config.example.json config.json
 # Editar config.json con la IP de la impresora y el clienteId correspondiente
 
-# 4. Levantar los dos procesos (en terminales separadas)
-node web/server.js   # Panel de configuración → http://localhost:4040
-node index.js        # Conector principal (imprime ticket de confirmación al arrancar)
+# 4. Levantar los procesos
+
+# Opción A — desarrollo (dos terminales separadas)
+node web/server.js
+node index.js
+
+# Opción B — producción con PM2 (un solo comando, autoarranque con Windows)
+npm install -g pm2
+pm2 start ecosystem.config.js
+pm2 save
+
+# Para autoarranque al iniciar Windows:
+npm install -g pm2-windows-startup
+pm2-startup install
 ```
 
 > **Requisitos:** Node.js 18+. La impresora debe estar en la misma red local y accesible por TCP en el puerto configurado (default: 9100).
