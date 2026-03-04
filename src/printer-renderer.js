@@ -98,11 +98,8 @@ async function renderSection(printer, section, config, useFontTicket) {
       try {
         let buffer;
         if (section.src.startsWith("data:")) {
-          // data:image/png;base64,<BASE64>
-          const base64 = section.src.split(",")[1];
-          buffer = Buffer.from(base64, "base64");
+          buffer = Buffer.from(section.src.split(",")[1], "base64");
         } else {
-          // raw base64 sin prefijo
           buffer = Buffer.from(section.src, "base64");
         }
         printer.alignCenter();

@@ -107,18 +107,23 @@ async function comprobarImpresora() {
 /* ==========================
    Impresión de confirmación
    ========================== */
-function logoABase64(rutaRelativa) {
+async function logoABase64(rutaRelativa) {
   const rutaAbsoluta = path.join(ROOT_DIR, rutaRelativa);
   if (!fs.existsSync(rutaAbsoluta)) return null;
-  const data = fs.readFileSync(rutaAbsoluta).toString("base64");
-  return "data:image/png;base64," + data;
+  const sharp = require("sharp");
+  const MAX_LOGO_WIDTH = 400;
+  const meta = await sharp(rutaAbsoluta).metadata();
+  const buffer = meta.width > MAX_LOGO_WIDTH
+    ? await sharp(rutaAbsoluta).resize(MAX_LOGO_WIDTH, null, { fit: "inside" }).png().toBuffer()
+    : fs.readFileSync(rutaAbsoluta);
+  return "data:image/png;base64," + buffer.toString("base64");
 }
 
 async function imprimirConfirmacion() {
   const sections = [];
 
   if (config.useHeaderLogo && config.assets?.logoHeader?.path) {
-    const src = logoABase64(config.assets.logoHeader.path);
+    const src = await logoABase64(config.assets.logoHeader.path);
     if (src) sections.push({ type: "image", src });
   }
 
@@ -127,7 +132,7 @@ async function imprimirConfirmacion() {
   sections.push({ type: "spacer" });
 
   if (config.useFooterLogo && config.assets?.logoFooter?.path) {
-    const src = logoABase64(config.assets.logoFooter.path);
+    const src = await logoABase64(config.assets.logoFooter.path);
     if (src) sections.push({ type: "image", src });
   }
 
