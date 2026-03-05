@@ -16,7 +16,7 @@ npm install
 
 # 3. Crear la configuración local
 cp config.example.json config.json
-# Editar config.json con la IP de la impresora y el clienteId correspondiente
+# Editar config.json con el clienteId correspondiente
 
 # 4. Levantar los procesos
 
@@ -34,9 +34,9 @@ npm install -g pm2-windows-startup
 pm2-startup install
 ```
 
-> **Requisitos:** Node.js 18+. La impresora debe estar en la misma red local y accesible por TCP en el puerto configurado (default: 9100).
+> **Requisitos:** Node.js 18+. La(s) impresora(s) debe estar en la misma red local y accesible por TCP.
 
-Una vez levantado, la configuración (IP, logos, fuente TTF) se gestiona desde el panel web en `conabsolute.com`.
+Una vez levantado, la configuración visual (logos, fuente TTF) se gestiona desde el panel web en `localhost:4040`.
 
 ---
 
@@ -59,6 +59,11 @@ Emitir el evento `"imprimir"` al backend, quien lo redirige al conector vía soc
 
 ```json
 {
+  "_printer": {
+    "ip": "192.168.1.100",
+    "port": 9100,
+    "width": 48
+  },
   "_templateInfo": {
     "id": "ticket-cocina"
   },
@@ -142,8 +147,8 @@ El campo `src` acepta:
 ```json
 {
   "error": "Payload invalido",
-  "details": "Campos faltantes o invalidos: sections",
-  "hint": "El payload debe incluir _template.sections con tipo text, image o spacer"
+  "details": "Campos faltantes o invalidos: _printer.ip",
+  "hint": "El payload debe incluir _printer.ip y _template.sections con tipo text, image o spacer"
 }
 ```
 
@@ -153,6 +158,11 @@ El campo `src` acepta:
 
 ```json
 {
+  "_printer": {
+    "ip": "192.168.1.102",
+    "port": 9100,
+    "width": 48
+  },
   "_templateInfo": { "id": "ticket-cocina" },
   "_template": {
     "sections": [
@@ -187,6 +197,8 @@ El campo `src` acepta:
 ## Configuración en el cliente
 
 El panel de administración local está en `http://localhost:4040`. Desde ahí se configura:
-- IP y puerto de la impresora
-- Logo de cabecera y pie
-- Fuente TTF personalizada (si se usa `useFontTicket`)
+- Logo de cabecera y pie general.
+- Fuente TTF personalizada (si se usa `useFontTicket`).
+- ID de Cliente.
+
+> **¡Importante!** Ya no se configuran IPs en el conector. El ruteo hacia múltiples impresoras (barra, cocina, caja) lo domina directamente el payload del frontend en la propiedad `_printer`.

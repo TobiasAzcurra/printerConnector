@@ -1,8 +1,5 @@
 {
   "clienteId": "nombre-del-cliente",
-  "printerIP": "192.168.100.169",
-  "printerPort": 9100,
-  "ticketWidth": 48,
   "useHeaderLogo": true,
   "useFooterLogo": true,
   "useFontTicket": false,

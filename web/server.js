@@ -103,9 +103,6 @@ function readConfigSafe() {
   if (!fs.existsSync(configPath)) {
     const defaultConfig = {
       clienteId: "cliente-default",
-      printerIP: "",
-      printerPort: 9100,
-      ticketWidth: 48,
       useHeaderLogo: true,
       useFooterLogo: true,
       useFontTicket: false,
@@ -119,9 +116,7 @@ function readConfigSafe() {
 
   if (config.useHeaderLogo === undefined) config.useHeaderLogo = true;
   if (config.useFooterLogo === undefined) config.useFooterLogo = true;
-  if (config.ticketWidth === undefined) config.ticketWidth = 48;
   if (config.useFontTicket === undefined) config.useFontTicket = false;
-  if (!config.printerPort) config.printerPort = 9100;
   if (!config.assets) config.assets = {};
 
   return config;
@@ -183,63 +178,7 @@ app.post("/api/config", (req, res) => {
   }
 });
 
-// Endpoint para testear la impresora por TCP
-app.get("/api/ping-printer", async (req, res) => {
-  try {
-    const cfg = readConfigSafe();
-    const ip = (req.query.ip || cfg.printerIP || "").trim();
-    const port = Number(req.query.port || cfg.printerPort || 9100);
 
-    if (!ip) return res.status(400).json({ error: "IP no definida" });
-
-    const ok = await new Promise((resolve) => {
-      const socket = new net.Socket();
-      let finished = false;
-
-      socket.setTimeout(1500);
-
-      socket.once("connect", () => {
-        finished = true;
-        socket.destroy();
-        resolve(true);
-      });
-
-      socket.once("timeout", () => {
-        if (!finished) {
-          finished = true;
-          socket.destroy();
-          resolve(false);
-        }
-      });
-
-      socket.once("error", () => {
-        if (!finished) {
-          finished = true;
-          socket.destroy();
-          resolve(false);
-        }
-      });
-
-      try {
-        socket.connect(port, ip);
-      } catch {
-        if (!finished) {
-          finished = true;
-          try {
-            socket.destroy();
-          } catch {}
-          resolve(false);
-        }
-      }
-    });
-
-    res.json({ success: ok, ip, port });
-  } catch (err) {
-    res
-      .status(500)
-      .json({ error: "Error en ping de impresora", details: err.message });
-  }
-});
 
 // ------------------------- LOGOS -------------------------
 
@@ -396,16 +335,15 @@ app.delete("/api/logo-footer", (req, res) => {
 // Endpoint para imprimir (usa QueueManager)
 app.post("/api/imprimir", async (req, res) => {
   const data = req.body;
-  const template = data._template;
 
-  // Validar que el payload traiga un template con sections
-  const validacion = validarDatosParaPlantilla(template);
+  // Validar que el payload contenga la impresora de destino y un template válido
+  const validacion = validarDatosParaPlantilla(data);
 
   if (!validacion.valid) {
     return res.status(400).json({
       error: "Payload invalido",
       details: `Campos faltantes o invalidos: ${validacion.missingFields.join(", ")}`,
-      hint: "El payload debe incluir _template.sections con tipo text, image o spacer",
+      hint: "El payload debe incluir _printer.ip y _template.sections con tipo text, image o spacer",
     });
   }
 
@@ -470,6 +408,9 @@ app.post("/api/job-completed", (req, res) => {
     }
 
     queueManager.markCompleted(jobId);
+    
+    // Notificación en tiempo real al frontend
+    io.emit("job-success", { jobId });
 
     res.json({ success: true });
   } catch (err) {
@@ -487,6 +428,9 @@ app.post("/api/job-failed", (req, res) => {
     }
 
     queueManager.markFailed(jobId, error);
+    
+    // Notificación en tiempo real al frontend
+    io.emit("job-error", { jobId, error });
 
     res.json({ success: true });
   } catch (err) {

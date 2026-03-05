@@ -10,7 +10,18 @@
  * @param {Object} template - { sections: [...] }
  * @returns {{ valid: boolean, missingFields: string[] }}
  */
-function validarDatosParaPlantilla(template) {
+function validarDatosParaPlantilla(data) {
+  const template = data._template;
+  const printer  = data._printer;
+
+  if (!printer || !printer.ip) {
+    return {
+      valid: false,
+      missingFields: ["_printer.ip"],
+      details: { message: "El payload debe especificar la IP de destino en _printer.ip" },
+    };
+  }
+
   if (!template || !Array.isArray(template.sections) || template.sections.length === 0) {
     return {
       valid: false,
@@ -21,7 +32,7 @@ function validarDatosParaPlantilla(template) {
 
   const TIPOS_VALIDOS = new Set(["text", "image", "spacer"]);
   const invalidas = template.sections
-    .map((s, i) => (!s.type || !TIPOS_VALIDOS.has(s.type) ? `sections[${i}].type` : null))
+    .map((s, i) => (!s.type || !TIPOS_VALIDOS.has(s.type) ? `_template.sections[${i}].type` : null))
     .filter(Boolean);
 
   return {

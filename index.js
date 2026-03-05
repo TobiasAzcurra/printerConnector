@@ -13,7 +13,6 @@ const API_BASE = "http://localhost:4040";
 
 let config = {};
 let isProcessingQueue = false;
-let printerWasOnline  = null; // null=desconocido, false=offline, true=online
 
 
 
@@ -27,12 +26,9 @@ function cargarConfig() {
       JSON.stringify(
         {
           clienteId: "cliente-default",
-          printerIP: "",
-          printerPort: 9100,
           useHeaderLogo: true,
           useFooterLogo: true,
           useFontTicket: false,
-          ticketWidth: 48,
           assets: {},
         },
         null,
@@ -52,7 +48,6 @@ function cargarConfig() {
     if (config.useHeaderLogo === undefined) config.useHeaderLogo = true;
     if (config.useFooterLogo === undefined) config.useFooterLogo = true;
     if (config.useFontTicket === undefined) config.useFontTicket = false;
-    if (config.ticketWidth === undefined) config.ticketWidth = 48;
     if (!config.assets) config.assets = {};
 
 
@@ -72,97 +67,11 @@ function cargarConfig() {
 }
 
 /* ==========================
-   Verificación TCP de impresora
-   ========================== */
-function testTcpConnection(ip, port, timeoutMs = 3000) {
-  return new Promise((resolve) => {
-    if (!ip) return resolve(false);
-    const socket = new net.Socket();
-    socket.setTimeout(timeoutMs);
-    socket
-      .on("connect", () => { socket.destroy(); resolve(true); })
-      .on("timeout", () => { socket.destroy(); resolve(false); })
-      .on("error",   () => resolve(false))
-      .connect(port || 9100, ip);
-  });
-}
-
-/**
- * Comprueba si la impresora está disponible por TCP.
- * Si transiciona de offline/desconocido → online, imprime el ticket de confirmación.
- */
-async function comprobarImpresora() {
-  const isOnline = await testTcpConnection(config.printerIP, config.printerPort);
-
-  if (isOnline && printerWasOnline !== true) {
-    console.log("Impresora disponible. Imprimiendo ticket de confirmación...");
-    await imprimirConfirmacion();
-  } else if (!isOnline && printerWasOnline === true) {
-    console.log("Impresora desconectada. Esperando reconexión...");
-  }
-
-  printerWasOnline = isOnline;
-}
-
-/* ==========================
-   Impresión de confirmación
-   ========================== */
-async function logoABase64(rutaRelativa) {
-  const rutaAbsoluta = path.join(ROOT_DIR, rutaRelativa);
-  if (!fs.existsSync(rutaAbsoluta)) return null;
-  const sharp = require("sharp");
-  const MAX_LOGO_WIDTH = 400;
-  const meta = await sharp(rutaAbsoluta).metadata();
-  const buffer = meta.width > MAX_LOGO_WIDTH
-    ? await sharp(rutaAbsoluta).resize(MAX_LOGO_WIDTH, null, { fit: "inside" }).png().toBuffer()
-    : fs.readFileSync(rutaAbsoluta);
-  return "data:image/png;base64," + buffer.toString("base64");
-}
-
-async function imprimirConfirmacion() {
-  const sections = [];
-
-  if (config.useHeaderLogo && config.assets?.logoHeader?.path) {
-    const src = await logoABase64(config.assets.logoHeader.path);
-    if (src) sections.push({ type: "image", src });
-  }
-
-  sections.push({ type: "spacer" });
-  sections.push({ type: "text", text: "Impresora conectada correctamente", style: { align: "center", fontSize: 28, bold: true } });
-  sections.push({ type: "spacer" });
-
-  if (config.useFooterLogo && config.assets?.logoFooter?.path) {
-    const src = await logoABase64(config.assets.logoFooter.path);
-    if (src) sections.push({ type: "image", src });
-  }
-
-  sections.push({ type: "spacer" });
-  sections.push({ type: "text", text: "Impulsado por Absolute.", style: { align: "center", fontSize: 24 } });
-
-  const job = {
-    _templateInfo: { id: "confirmacion", jobId: "confirmacion-" + Date.now() },
-    _template: { sections },
-  };
-
-  try {
-    await printerRenderer.imprimirConPlantilla(config, job, job._template);
-    console.log("Confirmacion impresa.");
-  } catch (err) {
-    console.error("Error al imprimir confirmacion:", err.message);
-  }
-}
-
-/* ==========================
    Reinicio del conector
    ========================== */
-async function reiniciarConector() {
+function reiniciarConector() {
   console.log("Recargando configuración...");
   cargarConfig();
-
-  // Forzar re-evaluación del estado de la impresora
-  // (imprime confirmación si está disponible, sea al arrancar o al reconectar)
-  printerWasOnline = null;
-  await comprobarImpresora();
 
   processPrintQueue();
 }
@@ -230,6 +139,12 @@ async function notifyJobFailed(jobId, error) {
 }
 
 /* ==========================
+   Estado de Reintentos (Retries)
+   ========================== */
+const MAX_RETRIES = 5;
+const retryStates = {}; // { [filename]: { count: 0, nextRetryTime: 0 } }
+
+/* ==========================
    Procesador de cola
    ========================== */
 async function processPrintQueue() {
@@ -255,75 +170,99 @@ async function processPrintQueue() {
       return;
     }
 
-    console.log(`\n${"=".repeat(60)}`);
-    console.log(`COLA DE IMPRESIÓN: ${files.length} trabajos pendientes`);
-    console.log(`${"=".repeat(60)}\n`);
+    if (files.length > 0) {
+      console.log(`\n--- Evaluando Cola: ${files.length} trabajos ---`);
+    }
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const jobPath = path.join(queueDir, file);
       const processingPath = path.join(processingDir, file);
 
-      console.log(`\n[${i + 1}/${files.length}] Procesando: ${file}`);
+      // Chequear si el job está en cooldown de retry
+      const state = retryStates[file];
+      if (state && Date.now() < state.nextRetryTime) {
+        continue;
+      }
+
+      console.log(`[▶] Procesando: ${file}`);
 
       try {
         if (!fs.existsSync(processingDir)) {
           fs.mkdirSync(processingDir, { recursive: true });
         }
 
-        console.log(`  Moviendo a processing: ${file}`);
         fs.renameSync(jobPath, processingPath);
 
         const jobContent = fs.readFileSync(processingPath, "utf8");
         const datos = JSON.parse(jobContent);
 
         const jobId = datos._templateInfo?.jobId || file.replace(".json", "");
-        console.log(`  Imprimiendo job: ${jobId}`);
 
         const startTime = Date.now();
         const success = await handleImpresion(datos);
         const duration = Date.now() - startTime;
 
         if (success) {
-          console.log(`  Completado en ${duration}ms`);
-          console.log(`  Eliminando archivo procesado`);
+          console.log(`  ✅ Completado en ${duration}ms (${jobId})`);
           fs.unlinkSync(processingPath);
+
+          // Si pasó, evitamos ensuciar la memoria
+          delete retryStates[file];
 
           // Notificar al servidor que completó
           await notifyJobCompleted(jobId);
         } else {
-          throw new Error("Impresión falló");
+          throw new Error("HandleImpresion devolvió falso indicando fallo interno");
         }
 
-        console.log(`  Esperando 500ms antes del siguiente...`);
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 200));
       } catch (err) {
-        console.error(`  Error procesando ${file}:`, err.message);
-
         const jobId = file.replace(".json", "");
-        await notifyJobFailed(jobId, err);
+        console.error(`  ❌ Error procesando ${jobId}: ${err.message}`);
 
-        // Mover a carpeta de fallidos en vez de devolver a cola
-        const failedDir = path.join(ROOT_DIR, "print-failed");
-        if (!fs.existsSync(failedDir)) {
-          fs.mkdirSync(failedDir, { recursive: true });
+        // Lógica de Reintentos
+        if (!retryStates[file]) {
+          retryStates[file] = { count: 0, nextRetryTime: 0 };
         }
+        
+        retryStates[file].count += 1;
+        
+        if (retryStates[file].count <= MAX_RETRIES) {
+          // Calcular backoff (ej: 5s, 10s, 20s, 40s, 80s)
+          const delayMs = 5000 * Math.pow(2, retryStates[file].count - 1);
+          retryStates[file].nextRetryTime = Date.now() + delayMs;
+          
+          console.log(`  🔄 Reintento ${retryStates[file].count}/${MAX_RETRIES} programado en ${delayMs/1000}s`);
+          
+          // Mover de vuelta a la cola
+          if (fs.existsSync(processingPath)) {
+            fs.renameSync(processingPath, jobPath);
+          }
+        } else {
+          console.error(`  ⛔ Reintentos agotados para ${jobId}. Definitivamente fallido.`);
+          await notifyJobFailed(jobId, err);
+          delete retryStates[file];
 
-        if (fs.existsSync(processingPath)) {
-          try {
-            const failedPath = path.join(failedDir, file);
-            fs.renameSync(processingPath, failedPath);
-            console.log(`  Movido a carpeta de fallidos`);
-          } catch (e) {
-            console.error(`  No se pudo mover a fallidos:`, e.message);
+          // Mover a carpeta de fallidos
+          const failedDir = path.join(ROOT_DIR, "print-failed");
+          if (!fs.existsSync(failedDir)) {
+            fs.mkdirSync(failedDir, { recursive: true });
+          }
+
+          if (fs.existsSync(processingPath)) {
+            try {
+              const failedPath = path.join(failedDir, file);
+              fs.renameSync(processingPath, failedPath);
+            } catch (e) {
+              console.error(`  No se pudo mover a fallidos:`, e.message);
+            }
           }
         }
       }
     }
 
-    console.log(`\n${"=".repeat(60)}`);
-    console.log(`PROCESAMIENTO COMPLETADO`);
-    console.log(`${"=".repeat(60)}\n`);
+
   } catch (err) {
     console.error("Error general en procesamiento de cola:", err);
   } finally {
@@ -407,12 +346,6 @@ setInterval(() => {
   processPrintQueue();
 }, 2000);
 
-/* ==========================
-   Chequeo de impresora cada 15 segundos
-   ========================== */
-setInterval(() => {
-  comprobarImpresora();
-}, 15000);
 
 /* ==========================
    Run

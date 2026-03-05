@@ -127,20 +127,24 @@ async function renderSection(printer, section, config, useFontTicket) {
 // Core
 // ---------------------------------------------------------------------------
 
-async function inicializarImpresora(config) {
+async function inicializarImpresora(printerConfig) {
+  const ip = printerConfig.ip;
+  const port = printerConfig.port || 9100;
+  const width = printerConfig.width || 48;
+
   const printer = new ThermalPrinter({
     type: PrinterTypes.EPSON,
-    interface: `tcp://${config.printerIP}:${config.printerPort}`,
-    width: config.ticketWidth || 48,
+    interface: `tcp://${ip}:${port}`,
+    width: width,
     removeSpecialCharacters: false,
     lineCharacter: "-",
     encoding: "utf8",
   });
 
+  console.log(`📡 Conectando a impresora en ${ip}:${port}...`);
   const isConnected = await printer.isPrinterConnected();
-  console.log("📡 Verificando conexión con impresora:", isConnected);
   if (!isConnected) {
-    console.log("❌ No se pudo conectar con la impresora");
+    console.log(`❌ No se pudo conectar con la impresora en ${ip}:${port}`);
     return null;
   }
   return printer;
@@ -149,7 +153,18 @@ async function inicializarImpresora(config) {
 /**
  * Valida que el payload contenga un template con sections válidas.
  */
-function validarDatosParaPlantilla(template) {
+function validarDatosParaPlantilla(data) {
+  const template = data._template;
+  const printer  = data._printer;
+
+  if (!printer || !printer.ip) {
+    return {
+      valid: false,
+      missingFields: ["_printer.ip"],
+      details: { message: "El payload debe especificar la IP de destino en _printer.ip" },
+    };
+  }
+
   if (!template || !Array.isArray(template.sections) || template.sections.length === 0) {
     return {
       valid: false,
@@ -173,13 +188,14 @@ async function imprimirConPlantilla(config, data, template) {
   const templateId = data._templateInfo?.id || "desconocido";
   console.log(`📝 Imprimiendo template: ${templateId} (${template.sections.length} secciones)`);
 
-  const validacion = validarDatosParaPlantilla(template);
+  const validacion = validarDatosParaPlantilla(data);
   if (!validacion.valid) {
-    console.error(`❌ Template inválido:`, validacion.missingFields);
+    console.error(`❌ Template o destino inválido:`, validacion.missingFields);
     return false;
   }
 
-  const printer = await inicializarImpresora(config);
+  const printerDest = data._printer;
+  const printer = await inicializarImpresora(printerDest);
   if (!printer) return false;
 
   const useFontTicket = config.useFontTicket === true;

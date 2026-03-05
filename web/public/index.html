@@ -388,20 +388,6 @@
           <input id="clienteId" placeholder="burger123" />
           <div class="hint">Identificador único de tu negocio</div>
         </div>
-
-        <div class="form-group">
-          <label for="printerIP">IP de la Impresora</label>
-          <input id="printerIP" placeholder="192.168.0.169" />
-          <div class="hint">
-            Dirección IP de tu impresora térmica en la red local
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="printerPort">Puerto</label>
-          <input id="printerPort" placeholder="9100" type="number" />
-          <div class="hint">Normalmente 9100 para impresoras térmicas</div>
-        </div>
       </div>
 
       <!-- Tab Ticket -->
@@ -414,18 +400,6 @@
           <div class="hint">
             Aparecerá en el encabezado de todos los tickets
           </div>
-        </div>
-
-        <div class="form-group">
-          <label for="ticketWidth">Ancho del Ticket</label>
-          <input
-            id="ticketWidth"
-            type="number"
-            min="32"
-            max="64"
-            placeholder="48"
-          />
-          <div class="hint">Ancho en número de caracteres (estándar: 48)</div>
         </div>
       </div>
 
@@ -687,28 +661,9 @@
         <button class="btn-primary" onclick="guardar()">
           💾 Guardar Cambios
         </button>
-        <button class="btn-test" onclick="testImpresora()">
-          🖨️ Imprimir Prueba
-        </button>
       </div>
 
       <div id="msg"></div>
-    </div>
-    <!-- Modal para test de impresión -->
-    <div id="testModal" class="modal">
-      <div class="modal-content">
-        <span class="close" onclick="closeModal()">&times;</span>
-        <h2>Prueba de Impresión</h2>
-        <p>Se enviará un ticket de prueba a la impresora configurada.</p>
-        <p>Asegúrate de guardar los cambios antes de realizar la prueba.</p>
-
-        <div class="buttons">
-          <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
-          <button class="btn-primary" onclick="confirmarTest()">
-            Imprimir Prueba
-          </button>
-        </div>
-      </div>
     </div>
 
     <div class="footer">
@@ -723,15 +678,10 @@
           .then((cfg) => {
             // Valores básicos
             document.getElementById("clienteId").value = cfg.clienteId || "";
-            document.getElementById("printerIP").value = cfg.printerIP || "";
-            document.getElementById("printerPort").value =
-              cfg.printerPort || 9100;
 
             // Valores avanzados
             document.getElementById("businessName").value =
               cfg.businessName || "";
-            document.getElementById("ticketWidth").value =
-              cfg.ticketWidth || 48;
 
             // Opciones de logos
             document.getElementById("useHeaderLogo").checked =
@@ -929,18 +879,9 @@
       // Guardar la configuración
       function guardar() {
         const clienteId = document.getElementById("clienteId").value.trim();
-        const printerIP = document.getElementById("printerIP").value.trim();
-        const printerPort = parseInt(
-          document.getElementById("printerPort").value,
-          10
-        );
         const businessName = document
           .getElementById("businessName")
           .value.trim();
-        const ticketWidth = parseInt(
-          document.getElementById("ticketWidth").value,
-          10
-        );
         const useHeaderLogo = document.getElementById("useHeaderLogo").checked;
         const useFooterLogo = document.getElementById("useFooterLogo").checked;
         const useFontTicket = document.getElementById("useFontTicket")
@@ -953,36 +894,14 @@
           return;
         }
 
-        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
-        if (!ipRegex.test(printerIP)) {
-          mostrarMensaje("Formato de IP inválido", false);
-          return;
-        }
-
-        if (isNaN(printerPort) || printerPort < 1 || printerPort > 65535) {
-          mostrarMensaje("Puerto inválido (debe estar entre 1-65535)", false);
-          return;
-        }
-
         if (!businessName) {
           mostrarMensaje("El nombre del negocio no puede estar vacío", false);
           return;
         }
 
-        if (isNaN(ticketWidth) || ticketWidth < 32 || ticketWidth > 64) {
-          mostrarMensaje(
-            "El ancho del ticket debe estar entre 32 y 64 caracteres",
-            false
-          );
-          return;
-        }
-
         const data = {
           clienteId,
-          printerIP,
-          printerPort,
           businessName,
-          ticketWidth,
           useHeaderLogo,
           useFooterLogo,
           useFontTicket,
