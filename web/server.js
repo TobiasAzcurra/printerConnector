@@ -362,6 +362,16 @@ app.post("/api/imprimir", async (req, res) => {
     const result = await queueManager.enqueue(jobId, datosParaImprimir);
 
     if (result.success) {
+      // 1. Notificación inmediata al Socket para UI Locking (Mitigar Latencia)
+      io.emit("job-queued", {
+        status: "queued",
+        jobId: result.jobId,
+        orderId: data.orderId || null,
+        printerName: data.printerName || null,
+        position: result.position
+      });
+
+      // 2. Respuesta HTTP original
       res.json({
         success: true,
         message: "Trabajo encolado correctamente",
@@ -401,7 +411,7 @@ app.get("/api/print-queue/status", (req, res) => {
 // Endpoint para que el worker notifique completado
 app.post("/api/job-completed", (req, res) => {
   try {
-    const { jobId } = req.body;
+    const { jobId, orderId, printerName } = req.body;
 
     if (!jobId) {
       return res.status(400).json({ error: "jobId requerido" });
@@ -410,7 +420,36 @@ app.post("/api/job-completed", (req, res) => {
     queueManager.markCompleted(jobId);
     
     // Notificación en tiempo real al frontend
-    io.emit("job-success", { jobId });
+    io.emit("job-success", { 
+      status: "success",
+      jobId,
+      orderId: orderId || null,
+      printerName: printerName || null
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint para que el worker notifique que arranca un proceso (para UI Lock)
+app.post("/api/job-processing", (req, res) => {
+  try {
+    const { jobId, orderId, attempt, printerName } = req.body;
+
+    if (!jobId) {
+      return res.status(400).json({ error: "jobId requerido" });
+    }
+    
+    // Notificación en tiempo real al frontend para bloquear botón
+    io.emit("job-processing", {
+      status: "processing",
+      jobId,
+      orderId: orderId || null,
+      printerName: printerName || null,
+      attempt: attempt || 1
+    });
 
     res.json({ success: true });
   } catch (err) {
@@ -421,7 +460,7 @@ app.post("/api/job-completed", (req, res) => {
 // Endpoint para que el worker notifique fallo
 app.post("/api/job-failed", (req, res) => {
   try {
-    const { jobId, error } = req.body;
+    const { jobId, error, orderId, printerIp, printerName } = req.body;
 
     if (!jobId) {
       return res.status(400).json({ error: "jobId requerido" });
@@ -430,7 +469,14 @@ app.post("/api/job-failed", (req, res) => {
     queueManager.markFailed(jobId, error);
     
     // Notificación en tiempo real al frontend
-    io.emit("job-error", { jobId, error });
+    io.emit("job-error", {
+      status: "error",
+      jobId: jobId,
+      orderId: orderId || null,
+      printerName: printerName || null,
+      printerIp: printerIp || null,
+      message: error || "Fallo definitivo tras reintentos."
+    });
 
     res.json({ success: true });
   } catch (err) {

@@ -114,24 +114,60 @@ async function handleImpresion(datos) {
 /* ==========================
    Notificar al servidor
    ========================== */
-async function notifyJobCompleted(jobId) {
+async function notifyJobProcessing(jobId, datos, attempt = 1) {
   try {
+    const payload = { jobId, attempt };
+    if (datos) {
+      if (datos.orderId) payload.orderId = datos.orderId;
+      if (datos.printerName) payload.printerName = datos.printerName;
+    }
+
+    await fetch(`${API_BASE}/api/job-processing`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.error("No se pudo notificar processing:", err.message);
+  }
+}
+
+async function notifyJobCompleted(jobId, datos) {
+  try {
+    const payload = { jobId };
+    if (datos) {
+      if (datos.orderId) payload.orderId = datos.orderId;
+      if (datos.printerName) payload.printerName = datos.printerName;
+    }
+
     await fetch(`${API_BASE}/api/job-completed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId }),
+      body: JSON.stringify(payload),
     });
   } catch (err) {
     console.error("No se pudo notificar completado:", err.message);
   }
 }
 
-async function notifyJobFailed(jobId, error) {
+async function notifyJobFailed(jobId, error, datos) {
   try {
+    const payload = {
+      jobId,
+      error: error.message
+    };
+
+    // Add additional metadata for the frontend
+    if (datos) {
+      if (datos.orderId) payload.orderId = datos.orderId;
+      if (datos.printerName) payload.printerName = datos.printerName;
+      if (datos._printer && datos._printer.ip) payload.printerIp = datos._printer.ip;
+    }
+
     await fetch(`${API_BASE}/api/job-failed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId, error: error.message }),
+      body: JSON.stringify(payload),
     });
   } catch (err) {
     console.error("No se pudo notificar fallo:", err.message);
@@ -199,7 +235,15 @@ async function processPrintQueue() {
 
         const jobId = datos._templateInfo?.jobId || file.replace(".json", "");
 
+        // Calcular en qué intento estamos
+        const stateForAttempt = retryStates[file];
+        const currentAttempt = stateForAttempt ? stateForAttempt.count + 1 : 1;
+
         const startTime = Date.now();
+        
+        // Notify the frontend that we are about to lock this ticket for processing
+        await notifyJobProcessing(jobId, datos, currentAttempt);
+        
         const success = await handleImpresion(datos);
         const duration = Date.now() - startTime;
 
@@ -211,7 +255,7 @@ async function processPrintQueue() {
           delete retryStates[file];
 
           // Notificar al servidor que completó
-          await notifyJobCompleted(jobId);
+          await notifyJobCompleted(jobId, datos);
         } else {
           throw new Error("HandleImpresion devolvió falso indicando fallo interno");
         }
@@ -225,23 +269,30 @@ async function processPrintQueue() {
         if (!retryStates[file]) {
           retryStates[file] = { count: 0, nextRetryTime: 0 };
         }
-        
+
         retryStates[file].count += 1;
-        
+
         if (retryStates[file].count <= MAX_RETRIES) {
           // Calcular backoff (ej: 5s, 10s, 20s, 40s, 80s)
           const delayMs = 5000 * Math.pow(2, retryStates[file].count - 1);
           retryStates[file].nextRetryTime = Date.now() + delayMs;
-          
+
           console.log(`  🔄 Reintento ${retryStates[file].count}/${MAX_RETRIES} programado en ${delayMs/1000}s`);
-          
+
           // Mover de vuelta a la cola
           if (fs.existsSync(processingPath)) {
             fs.renameSync(processingPath, jobPath);
           }
         } else {
           console.error(`  ⛔ Reintentos agotados para ${jobId}. Definitivamente fallido.`);
-          await notifyJobFailed(jobId, err);
+          // Read the original data again just in case we need it for notification
+          let failedDatos = {};
+          try {
+            failedDatos = JSON.parse(fs.readFileSync(processingPath, "utf8"));
+          } catch (e) {
+            console.error(`  No se pudieron leer los datos para notificar:`, e.message);
+          }
+          await notifyJobFailed(jobId, err, failedDatos);
           delete retryStates[file];
 
           // Mover a carpeta de fallidos
