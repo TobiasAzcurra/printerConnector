@@ -1,6 +1,10 @@
 const io = require("socket.io-client");
+const { v4: uuidv4 } = require("uuid");
 
 const API_BASE = "http://localhost:4040";
+
+const TEST_LOG_ID = uuidv4();
+console.log(`logId de prueba: ${TEST_LOG_ID}`);
 
 console.log(`Conectando a WebSocket en ${API_BASE}...`);
 const socket = io(API_BASE);
@@ -9,19 +13,20 @@ let gotProcessing = false;
 
 socket.on("connect", () => {
   console.log("✅ Conectado al servidor WebSocket!");
-  
+
   // Enviar un trabajo a una IP VÁLIDA para probar el flujo de éxito completo
   const dummyPayload = {
     orderId: "pedido_LOCK_PRUEBA_001",
     printerName: "Cocina",
     _printer: {
-      ip: "192.168.100.170", // Ticketera B (Configurada ayer, válida)
+      ip: "192.168.100.170", // Ticketera B
       port: 9100,
       width: 48
     },
     _templateInfo: {
       id: "ticket-prueba",
-      jobId: "job_SUCCESS_TEST"
+      jobId: "job_SUCCESS_TEST",
+      logId: TEST_LOG_ID,
     },
     _template: {
       sections: [
@@ -68,15 +73,18 @@ socket.on("job-success", (data) => {
   console.log("\n✅ ====== EVENTO JOB-SUCCESS RECIBIDO ====== ✅");
   console.log(JSON.stringify(data, null, 2));
   console.log("==============================================\n");
-  
+
   if (data.orderId === "pedido_LOCK_PRUEBA_001" && data.printerName === "Cocina") {
-      if (gotQueued && gotProcessing) {
-          console.log("Flujo COMPLETO Exitoso (Queued -> Processing -> Success) con PrinterName intacto. Cerrando...");
-          process.exit(0);
-      } else {
-          console.log(`❌ ERROR de orden. Queued: ${gotQueued}, Processing: ${gotProcessing}`);
-          process.exit(1);
-      }
+    if (!gotQueued || !gotProcessing) {
+      console.log(`❌ ERROR de orden. Queued: ${gotQueued}, Processing: ${gotProcessing}`);
+      process.exit(1);
+    }
+    if (data.logId !== TEST_LOG_ID) {
+      console.error(`❌ logId incorrecto. Esperado: ${TEST_LOG_ID} | Recibido: ${data.logId}`);
+      process.exit(1);
+    }
+    console.log("✅ Flujo COMPLETO exitoso (Queued → Processing → Success) con logId verificado. Cerrando...");
+    process.exit(0);
   }
 });
 

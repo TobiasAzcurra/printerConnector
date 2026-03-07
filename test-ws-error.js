@@ -1,13 +1,17 @@
 const io = require("socket.io-client");
+const { v4: uuidv4 } = require("uuid");
 
 const API_BASE = "http://localhost:4040";
+
+const TEST_LOG_ID = uuidv4();
+console.log(`logId de prueba: ${TEST_LOG_ID}`);
 
 console.log(`Conectando a WebSocket en ${API_BASE}...`);
 const socket = io(API_BASE);
 
 socket.on("connect", () => {
   console.log("✅ Conectado al servidor WebSocket!");
-  
+
   // Enviar un trabajo a una IP falsa para provocar un fallo y timeout
   const dummyPayload = {
     orderId: "pedido_PRUEBA_WS_123",
@@ -18,7 +22,8 @@ socket.on("connect", () => {
     },
     _templateInfo: {
       id: "ticket-prueba",
-      jobId: "job_WS_ERROR_TEST"
+      jobId: "job_WS_ERROR_TEST",
+      logId: TEST_LOG_ID,
     },
     _template: {
       sections: [
@@ -50,10 +55,15 @@ socket.on("job-error", (data) => {
   console.log("\n🚨 ====== EVENTO JOB-ERROR RECIBIDO ====== 🚨");
   console.log(JSON.stringify(data, null, 2));
   console.log("========================================\n");
-  
+
   if (data.orderId === "pedido_PRUEBA_WS_123") {
-      console.log("Prueba exitosa. Cerrando...");
+    if (data.logId === TEST_LOG_ID) {
+      console.log("✅ logId verificado correctamente en job-error. Prueba exitosa. Cerrando...");
       process.exit(0);
+    } else {
+      console.error(`❌ logId incorrecto. Esperado: ${TEST_LOG_ID} | Recibido: ${data.logId}`);
+      process.exit(1);
+    }
   }
 });
 
