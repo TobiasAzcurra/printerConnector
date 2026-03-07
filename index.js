@@ -67,12 +67,35 @@ function cargarConfig() {
 }
 
 /* ==========================
+   Recuperar jobs huérfanos
+   ========================== */
+function recoverOrphanedJobs() {
+  if (!fs.existsSync(processingDir)) return;
+
+  const orphans = fs.readdirSync(processingDir).filter((f) => f.endsWith(".json"));
+  if (orphans.length === 0) return;
+
+  console.log(`⚠️  Recuperando ${orphans.length} job(s) huérfano(s) de print-processing/...`);
+
+  for (const file of orphans) {
+    const from = path.join(processingDir, file);
+    const to   = path.join(queueDir, file);
+    try {
+      fs.renameSync(from, to);
+      console.log(`  ↩️  ${file} → print-queue/`);
+    } catch (err) {
+      console.error(`  ❌ No se pudo recuperar ${file}:`, err.message);
+    }
+  }
+}
+
+/* ==========================
    Reinicio del conector
    ========================== */
 function reiniciarConector() {
   console.log("Recargando configuración...");
   cargarConfig();
-
+  recoverOrphanedJobs();
   processPrintQueue();
 }
 

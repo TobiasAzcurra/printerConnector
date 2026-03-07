@@ -7,7 +7,14 @@
     "start": "node index.js",
     "web": "node web/server.js",
     "dev": "concurrently \"npm run start\" \"npm run web\"",
-    "pkg": "pkg ."
+    "pkg": "pkg .",
+    "seed": "node scripts/seed-orders.js",
+    "seed:cleanup": "node scripts/seed-orders.js --cleanup",
+    "verify": "node scripts/verify-prints.js",
+    "verify:full": "node scripts/verify-prints.js --full",
+    "test:orphan": "node scripts/test-orphan-recovery.js",
+    "test:offline": "node scripts/test-printer-offline.js",
+    "test:recovery": "node scripts/test-recovery.js"
   },
   "bin": "index.js",
   "pkg": {
@@ -34,6 +41,7 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.1",
+    "firebase": "^12.10.0",
     "pkg": "^5.8.1"
   }
 }
