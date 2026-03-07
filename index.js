@@ -161,6 +161,7 @@ async function notifyJobCompleted(jobId, datos) {
     if (datos) {
       if (datos.orderId) payload.orderId = datos.orderId;
       if (datos.printerName) payload.printerName = datos.printerName;
+      if (datos._templateInfo?.logId) payload.logId = datos._templateInfo.logId;
     }
 
     await fetch(`${API_BASE}/api/job-completed`, {
@@ -185,6 +186,7 @@ async function notifyJobFailed(jobId, error, datos) {
       if (datos.orderId) payload.orderId = datos.orderId;
       if (datos.printerName) payload.printerName = datos.printerName;
       if (datos._printer && datos._printer.ip) payload.printerIp = datos._printer.ip;
+      if (datos._templateInfo?.logId) payload.logId = datos._templateInfo.logId;
     }
 
     await fetch(`${API_BASE}/api/job-failed`, {

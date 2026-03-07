@@ -356,6 +356,7 @@ app.post("/api/imprimir", async (req, res) => {
         id: data._templateInfo?.id || "custom",
         timestamp: new Date().toISOString(),
         jobId,
+        ...(data._templateInfo?.logId ? { logId: data._templateInfo.logId } : {}),
       },
     };
 
@@ -411,20 +412,21 @@ app.get("/api/print-queue/status", (req, res) => {
 // Endpoint para que el worker notifique completado
 app.post("/api/job-completed", (req, res) => {
   try {
-    const { jobId, orderId, printerName } = req.body;
+    const { jobId, orderId, printerName, logId } = req.body;
 
     if (!jobId) {
       return res.status(400).json({ error: "jobId requerido" });
     }
 
     queueManager.markCompleted(jobId);
-    
+
     // Notificación en tiempo real al frontend
-    io.emit("job-success", { 
+    io.emit("job-success", {
       status: "success",
       jobId,
       orderId: orderId || null,
-      printerName: printerName || null
+      printerName: printerName || null,
+      logId: logId || null,
     });
 
     res.json({ success: true });
@@ -460,14 +462,14 @@ app.post("/api/job-processing", (req, res) => {
 // Endpoint para que el worker notifique fallo
 app.post("/api/job-failed", (req, res) => {
   try {
-    const { jobId, error, orderId, printerIp, printerName } = req.body;
+    const { jobId, error, orderId, printerIp, printerName, logId } = req.body;
 
     if (!jobId) {
       return res.status(400).json({ error: "jobId requerido" });
     }
 
     queueManager.markFailed(jobId, error);
-    
+
     // Notificación en tiempo real al frontend
     io.emit("job-error", {
       status: "error",
@@ -475,7 +477,8 @@ app.post("/api/job-failed", (req, res) => {
       orderId: orderId || null,
       printerName: printerName || null,
       printerIp: printerIp || null,
-      message: error || "Fallo definitivo tras reintentos."
+      logId: logId || null,
+      message: error || "Fallo definitivo tras reintentos.",
     });
 
     res.json({ success: true });
