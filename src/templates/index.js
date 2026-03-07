@@ -30,7 +30,7 @@ function validarDatosParaPlantilla(data) {
     };
   }
 
-  const TIPOS_VALIDOS = new Set(["text", "image", "spacer"]);
+  const TIPOS_VALIDOS = new Set(["text", "image", "spacer", "icon-text"]);
   const invalidas = template.sections
     .map((s, i) => (!s.type || !TIPOS_VALIDOS.has(s.type) ? `_template.sections[${i}].type` : null))
     .filter(Boolean);

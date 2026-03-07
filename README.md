@@ -92,6 +92,7 @@ El conector **imprime las secciones en el orden exacto en que las recibe**, de a
 | `text` | Una línea de texto | `text` (string) | `style` |
 | `image` | Una imagen | `src` (base64 data URI o raw base64) | — |
 | `spacer` | Línea en blanco | — | — |
+| `icon-text` | Ícono PNG + texto en la misma línea | `iconSrc` (base64), `text` (string) | `style`, `iconSize`, `iconPosition` (`"left"` \| `"right"`), `align` |
 
 ---
 

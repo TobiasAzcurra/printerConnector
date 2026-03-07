@@ -110,6 +110,113 @@ async function renderSection(printer, section, config, useFontTicket) {
       break;
     }
 
+    // ── icon-text ─────────────────────────────────────────────────────────
+    // Renders icon + text side-by-side as a single bitmap image.
+    // When useFontTicket is true: text is rendered with the custom font via
+    // textRenderer, then composited with the icon using sharp.
+    // When useFontTicket is false: falls back to separate image + text sections.
+    case "icon-text": {
+      const iconPosition = section.iconPosition || "left";
+      const iconSize     = section.iconSize || 40;
+      const align        = section.align || section.style?.align || "center";
+
+      // Decode icon buffer
+      let iconBuffer = null;
+      if (section.iconSrc) {
+        try {
+          const sharp = require("sharp");
+          let rawBuffer;
+          if (section.iconSrc.startsWith("data:")) {
+            rawBuffer = Buffer.from(section.iconSrc.split(",")[1], "base64");
+          } else {
+            rawBuffer = Buffer.from(section.iconSrc, "base64");
+          }
+          iconBuffer = await sharp(rawBuffer)
+            .resize(iconSize, iconSize, {
+              fit: "contain",
+              background: { r: 255, g: 255, b: 255, alpha: 255 },
+            })
+            .png()
+            .toBuffer();
+        } catch (err) {
+          console.error(`❌ Error decodificando icono icon-text: ${err.message}`);
+        }
+      }
+
+      if (useFontTicket && section.text) {
+        // Render text as PNG with custom font, then composite with icon
+        try {
+          const sharp = require("sharp");
+          const textBuffer = await textRenderer.renderizarTexto(config.clienteId, section.text, {
+            fontSize:    section.style?.fontSize || 24,
+            centerText:  false,
+            bold:        section.style?.bold || false,
+            fontVersion: config.assets?.font?.sha256 || "default",
+          });
+
+          if (textBuffer && iconBuffer) {
+            const textMeta = await sharp(textBuffer).metadata();
+            const gap = 8;
+            const totalWidth  = iconSize + gap + textMeta.width;
+            const totalHeight = Math.max(iconSize, textMeta.height);
+            const textTop  = Math.floor((totalHeight - textMeta.height) / 2);
+            const iconTop  = Math.floor((totalHeight - iconSize) / 2);
+
+            const compositeOps = iconPosition === "left"
+              ? [
+                  { input: iconBuffer, top: iconTop, left: 0 },
+                  { input: textBuffer, top: textTop, left: iconSize + gap },
+                ]
+              : [
+                  { input: textBuffer, top: textTop, left: 0 },
+                  { input: iconBuffer, top: iconTop, left: textMeta.width + gap },
+                ];
+
+            const combined = await sharp({
+              create: {
+                width:      totalWidth,
+                height:     totalHeight,
+                channels:   4,
+                background: { r: 255, g: 255, b: 255, alpha: 255 },
+              },
+            })
+              .composite(compositeOps)
+              .png()
+              .toBuffer();
+
+            applyAlign(printer, align);
+            await imprimirImagenBuffer(printer, combined);
+          } else if (textBuffer) {
+            applyAlign(printer, align);
+            await imprimirImagenBuffer(printer, textBuffer);
+          } else if (iconBuffer) {
+            applyAlign(printer, align);
+            await imprimirImagenBuffer(printer, iconBuffer);
+          }
+        } catch (err) {
+          console.error(`❌ Error compositing icon-text: ${err.message}`);
+          // Fallback: icon then text separately
+          if (iconBuffer) {
+            printer.alignCenter();
+            await imprimirImagenBuffer(printer, iconBuffer);
+          }
+          if (section.text) {
+            await printText(printer, section.text, section.style || {}, config, useFontTicket);
+          }
+        }
+      } else {
+        // No custom font — print icon and text as separate sections
+        if (iconPosition === "left") {
+          if (iconBuffer) { applyAlign(printer, align); await imprimirImagenBuffer(printer, iconBuffer); }
+          if (section.text) await printText(printer, section.text, section.style || {}, config, false);
+        } else {
+          if (section.text) await printText(printer, section.text, section.style || {}, config, false);
+          if (iconBuffer) { applyAlign(printer, align); await imprimirImagenBuffer(printer, iconBuffer); }
+        }
+      }
+      break;
+    }
+
     // ── spacer ────────────────────────────────────────────────────────────
     case "spacer": {
       printer.newLine();

@@ -343,7 +343,7 @@ app.post("/api/imprimir", async (req, res) => {
     return res.status(400).json({
       error: "Payload invalido",
       details: `Campos faltantes o invalidos: ${validacion.missingFields.join(", ")}`,
-      hint: "El payload debe incluir _printer.ip y _template.sections con tipo text, image o spacer",
+      hint: "El payload debe incluir _printer.ip y _template.sections con tipo text, image, spacer o icon-text",
     });
   }
 
