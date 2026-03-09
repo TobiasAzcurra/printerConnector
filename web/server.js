@@ -20,6 +20,7 @@ const { createLogger } = require("../src/logger");
 const log       = createLogger("Server");
 const logAssets = createLogger("Assets");
 const logFont   = createLogger("Font");
+const logAuth   = createLogger("Auth");
 
 const app = express();
 const server = http.createServer(app);
@@ -335,10 +336,34 @@ app.delete("/api/logo-footer", (req, res) => {
   }
 });
 
+// ------------------------- AUTH -------------------------
+
+// Genera el secret una sola vez al arrancar si no existe en config
+(function ensureConnectorSecret() {
+  const cfg = readConfigSafe();
+  if (!cfg.connectorSecret) {
+    cfg.connectorSecret = crypto.randomUUID();
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+    logAuth.info("connectorSecret generado y guardado en config.json");
+  }
+})();
+
+function requireAuth(req, res, next) {
+  const secret = readConfigSafe().connectorSecret;
+  if (!secret) return next(); // sin secret configurado: auth desactivado
+
+  const auth = req.headers["authorization"];
+  if (!auth || auth !== `Bearer ${secret}`) {
+    logAuth.warn(`Solicitud rechazada — token inválido o ausente (${req.ip})`);
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+}
+
 // ------------------------- IMPRESIÓN -------------------------
 
 // Endpoint para imprimir (usa QueueManager)
-app.post("/api/imprimir", async (req, res) => {
+app.post("/api/imprimir", requireAuth, async (req, res) => {
   const data = req.body;
 
   // Validar que el payload contenga la impresora de destino y un template válido

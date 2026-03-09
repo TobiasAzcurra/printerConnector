@@ -10,5 +10,6 @@
   "useFooterLogo": true,
   "useFontTicket": false,
   "ticketWidth": 48,
+  "connectorSecret": "",
   "assets": {}
 }
