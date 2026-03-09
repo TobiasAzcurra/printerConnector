@@ -240,3 +240,60 @@ El panel de administración local está en `http://localhost:4040`. Desde ahí s
 - ID de Cliente.
 
 > **¡Importante!** Ya no se configuran IPs en el conector. El ruteo hacia múltiples impresoras (barra, cocina, caja) lo domina directamente el payload del frontend en la propiedad `_printer`.
+
+---
+
+## Monitoreo y análisis de logs de impresión
+
+Cada intento de impresión queda registrado en Firestore bajo:
+```
+absoluteClientes/{enterpriseId}/sucursales/{sucursalId}/printLogs
+```
+
+El script `conabsolute/src/migration/export-print-logs.js` exporta todos los logs de todas las empresas en un rango de fechas, genera un resumen en consola y guarda un JSON para análisis posterior.
+
+### Requisito único: service account de Firebase
+
+1. Ir a Firebase Console → ⚙️ Configuración del proyecto → **Cuentas de servicio**
+2. Hacer click en **Generar nueva clave privada**
+3. Guardar el archivo como `serviceAccountKey.json` en la raíz de `conabsolute/`
+
+> ⚠️ `serviceAccountKey.json` está en `.gitignore` — nunca se commitea.
+
+### Uso
+
+```bash
+# Desde la raíz de conabsolute/
+node src/migration/export-print-logs.js --from 2026-03-01 --to 2026-03-09
+
+# Si el service account está en otra ruta:
+node src/migration/export-print-logs.js --from 2026-03-01 --to 2026-03-09 --key /ruta/a/serviceAccountKey.json
+```
+
+El script imprime en consola:
+- Total de logs por estado (`sent`, `printed`, `error`, `failed_printer`)
+- Top 10 errores más frecuentes
+- Impresoras con más fallos definitivos
+
+Y genera un archivo `print-logs-export-<from>-a-<to>.json` en el directorio actual.
+
+### Analizar con Claude
+
+Correr el script, copiar el contenido del JSON y pegarlo a Claude con este prompt:
+
+> Analizá este export de printLogs de mi sistema de impresión. Quiero saber: tasa de éxito por empresa y por impresora, errores más frecuentes, impresoras problemáticas, y pedidos que nunca se imprimieron correctamente (tienen `error` o `failed_printer` pero no tienen un `printed` posterior con el mismo `orderId`).
+
+### Estructura de cada documento en `printLogs`
+
+| Campo | Descripción |
+|---|---|
+| `status` | `sent` → en vuelo \| `printed` → confirmado físicamente \| `error` → falló al encolar \| `failed_printer` → reintentos agotados |
+| `timestamp` | Cuándo se encoló |
+| `trigger` | `manual` (botón imprimir) \| `auto` (AutoPrintEngine) |
+| `event` | `ORDER_CREATED` \| `STATUS_CHANGED` (solo trigger auto) |
+| `statusTo` | Estado al que cambió el pedido (solo STATUS_CHANGED) |
+| `templateName` | Nombre del template de ticket |
+| `terminalName` | Nombre de la impresora destino |
+| `printScope` | `order` \| `item` |
+| `orderId` | ID del pedido |
+| `errorMessage` | Mensaje de error (solo si falló) |
