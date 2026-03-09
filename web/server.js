@@ -459,6 +459,9 @@ app.post("/api/job-processing", (req, res) => {
       return res.status(400).json({ error: "jobId requerido" });
     }
     
+    // Mover de pending → processing en el estado en memoria
+    queueManager.markProcessing(jobId);
+
     // Notificación en tiempo real al frontend para bloquear botón
     io.emit("job-processing", {
       status: "processing",

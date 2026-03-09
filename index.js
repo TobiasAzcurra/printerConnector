@@ -13,7 +13,6 @@ const confirmDir      = path.join(ROOT_DIR, "pending-confirmations");
 const API_BASE = "http://localhost:4040";
 
 let config = {};
-let isProcessingQueue = false;
 
 
 
@@ -295,146 +294,127 @@ async function notifyJobFailed(jobId, error, datos) {
    Estado de Reintentos (Retries)
    ========================== */
 const MAX_RETRIES = 5;
-const retryStates = {}; // { [filename]: { count: 0, nextRetryTime: 0 } }
+const retryStates = {}; // { [filename]: { count, nextRetryTime } }
+
+// Una impresora procesa un job a la vez — todas las impresoras corren en paralelo
+const processingByPrinter = {}; // { [printerKey]: boolean }
 
 /* ==========================
-   Procesador de cola
+   Procesador de un job individual
    ========================== */
-async function processPrintQueue() {
-  if (isProcessingQueue) {
+async function processJobFile(file, datos) {
+  const jobPath       = path.join(queueDir, file);
+  const processingPath = path.join(processingDir, file);
+  const jobId         = datos._templateInfo?.jobId || file.replace(".json", "");
+  const currentAttempt = retryStates[file] ? retryStates[file].count + 1 : 1;
+
+  if (!fs.existsSync(processingDir)) fs.mkdirSync(processingDir, { recursive: true });
+
+  try {
+    fs.renameSync(jobPath, processingPath);
+  } catch {
+    // El archivo ya fue tomado por un ciclo anterior — ignorar silenciosamente
+    throw new Error("Job ya procesado por otro ciclo");
+  }
+
+  await notifyJobProcessing(jobId, datos, currentAttempt);
+
+  const startTime = Date.now();
+  const success   = await handleImpresion(datos);
+  const duration  = Date.now() - startTime;
+
+  if (!success) throw new Error("HandleImpresion devolvió falso indicando fallo interno");
+
+  console.log(`  ✅ Completado en ${duration}ms (${jobId})`);
+  fs.unlinkSync(processingPath);
+  delete retryStates[file];
+  await notifyJobCompleted(jobId, datos);
+  await confirmPrintOnFirestore(datos, "printed");
+  await new Promise((r) => setTimeout(r, 200));
+}
+
+/* ==========================
+   Worker por impresora — maneja reintentos y limpia el lock al terminar
+   ========================== */
+async function processJobForPrinter(file, datos, printerKey) {
+  const jobPath        = path.join(queueDir, file);
+  const processingPath = path.join(processingDir, file);
+  const jobId          = file.replace(".json", "");
+
+  try {
+    await processJobFile(file, datos);
+  } catch (err) {
+    if (err.message === "Job ya procesado por otro ciclo") return;
+
+    console.error(`  ❌ Error procesando ${jobId} [${printerKey}]: ${err.message}`);
+
+    if (!retryStates[file]) retryStates[file] = { count: 0, nextRetryTime: 0 };
+    retryStates[file].count += 1;
+
+    if (retryStates[file].count <= MAX_RETRIES) {
+      const delayMs = 5000 * Math.pow(2, retryStates[file].count - 1);
+      retryStates[file].nextRetryTime = Date.now() + delayMs;
+      console.log(`  🔄 Reintento ${retryStates[file].count}/${MAX_RETRIES} en ${delayMs / 1000}s`);
+      if (fs.existsSync(processingPath)) fs.renameSync(processingPath, jobPath);
+    } else {
+      console.error(`  ⛔ Reintentos agotados para ${jobId}. Definitivamente fallido.`);
+      let failedDatos = {};
+      try { failedDatos = JSON.parse(fs.readFileSync(processingPath, "utf8")); } catch (e) {
+        console.error(`  No se pudieron leer los datos para notificar:`, e.message);
+      }
+      await notifyJobFailed(jobId, err, failedDatos);
+      await confirmPrintOnFirestore(failedDatos, "failed_printer");
+      delete retryStates[file];
+      const failedDir = path.join(ROOT_DIR, "print-failed");
+      if (!fs.existsSync(failedDir)) fs.mkdirSync(failedDir, { recursive: true });
+      if (fs.existsSync(processingPath)) {
+        try { fs.renameSync(processingPath, path.join(failedDir, file)); } catch (e) {
+          console.error(`  No se pudo mover a fallidos:`, e.message);
+        }
+      }
+    }
+  } finally {
+    processingByPrinter[printerKey] = false;
+  }
+}
+
+/* ==========================
+   Despachador de cola — lanza un worker por impresora en paralelo
+   ========================== */
+function processPrintQueue() {
+  if (!fs.existsSync(queueDir)) return;
+
+  let files;
+  try {
+    files = fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).sort();
+  } catch (err) {
+    console.error("Error leyendo cola:", err);
     return;
   }
 
-  try {
-    isProcessingQueue = true;
+  if (files.length === 0) return;
 
-    if (!fs.existsSync(queueDir)) {
-      isProcessingQueue = false;
-      return;
-    }
+  console.log(`\n--- Evaluando Cola: ${files.length} trabajos ---`);
 
-    const files = fs
-      .readdirSync(queueDir)
-      .filter((f) => f.endsWith(".json"))
-      .sort();
+  for (const file of files) {
+    // Saltar si el job está en cooldown de retry
+    const state = retryStates[file];
+    if (state && Date.now() < state.nextRetryTime) continue;
 
-    if (files.length === 0) {
-      isProcessingQueue = false;
-      return;
-    }
+    // Leer el job para obtener a qué impresora va
+    let datos;
+    try {
+      datos = JSON.parse(fs.readFileSync(path.join(queueDir, file), "utf8"));
+    } catch { continue; }
 
-    if (files.length > 0) {
-      console.log(`\n--- Evaluando Cola: ${files.length} trabajos ---`);
-    }
+    const printerKey = `${datos._printer?.ip}:${datos._printer?.port || 9100}`;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const jobPath = path.join(queueDir, file);
-      const processingPath = path.join(processingDir, file);
+    // Si esta impresora ya está ocupada, saltar (no bloquear las demás)
+    if (processingByPrinter[printerKey]) continue;
 
-      // Chequear si el job está en cooldown de retry
-      const state = retryStates[file];
-      if (state && Date.now() < state.nextRetryTime) {
-        continue;
-      }
-
-      console.log(`[▶] Procesando: ${file}`);
-
-      try {
-        if (!fs.existsSync(processingDir)) {
-          fs.mkdirSync(processingDir, { recursive: true });
-        }
-
-        fs.renameSync(jobPath, processingPath);
-
-        const jobContent = fs.readFileSync(processingPath, "utf8");
-        const datos = JSON.parse(jobContent);
-
-        const jobId = datos._templateInfo?.jobId || file.replace(".json", "");
-
-        // Calcular en qué intento estamos
-        const stateForAttempt = retryStates[file];
-        const currentAttempt = stateForAttempt ? stateForAttempt.count + 1 : 1;
-
-        const startTime = Date.now();
-        
-        // Notify the frontend that we are about to lock this ticket for processing
-        await notifyJobProcessing(jobId, datos, currentAttempt);
-        
-        const success = await handleImpresion(datos);
-        const duration = Date.now() - startTime;
-
-        if (success) {
-          console.log(`  ✅ Completado en ${duration}ms (${jobId})`);
-          fs.unlinkSync(processingPath);
-
-          delete retryStates[file];
-
-          await notifyJobCompleted(jobId, datos);
-          await confirmPrintOnFirestore(datos, "printed");
-        } else {
-          throw new Error("HandleImpresion devolvió falso indicando fallo interno");
-        }
-
-        await new Promise((r) => setTimeout(r, 200));
-      } catch (err) {
-        const jobId = file.replace(".json", "");
-        console.error(`  ❌ Error procesando ${jobId}: ${err.message}`);
-
-        // Lógica de Reintentos
-        if (!retryStates[file]) {
-          retryStates[file] = { count: 0, nextRetryTime: 0 };
-        }
-
-        retryStates[file].count += 1;
-
-        if (retryStates[file].count <= MAX_RETRIES) {
-          // Calcular backoff (ej: 5s, 10s, 20s, 40s, 80s)
-          const delayMs = 5000 * Math.pow(2, retryStates[file].count - 1);
-          retryStates[file].nextRetryTime = Date.now() + delayMs;
-
-          console.log(`  🔄 Reintento ${retryStates[file].count}/${MAX_RETRIES} programado en ${delayMs/1000}s`);
-
-          // Mover de vuelta a la cola
-          if (fs.existsSync(processingPath)) {
-            fs.renameSync(processingPath, jobPath);
-          }
-        } else {
-          console.error(`  ⛔ Reintentos agotados para ${jobId}. Definitivamente fallido.`);
-          // Read the original data again just in case we need it for notification
-          let failedDatos = {};
-          try {
-            failedDatos = JSON.parse(fs.readFileSync(processingPath, "utf8"));
-          } catch (e) {
-            console.error(`  No se pudieron leer los datos para notificar:`, e.message);
-          }
-          await notifyJobFailed(jobId, err, failedDatos);
-          await confirmPrintOnFirestore(failedDatos, "failed_printer");
-          delete retryStates[file];
-
-          // Mover a carpeta de fallidos
-          const failedDir = path.join(ROOT_DIR, "print-failed");
-          if (!fs.existsSync(failedDir)) {
-            fs.mkdirSync(failedDir, { recursive: true });
-          }
-
-          if (fs.existsSync(processingPath)) {
-            try {
-              const failedPath = path.join(failedDir, file);
-              fs.renameSync(processingPath, failedPath);
-            } catch (e) {
-              console.error(`  No se pudo mover a fallidos:`, e.message);
-            }
-          }
-        }
-      }
-    }
-
-
-  } catch (err) {
-    console.error("Error general en procesamiento de cola:", err);
-  } finally {
-    isProcessingQueue = false;
+    // Despachar sin bloquear — cada impresora tiene su propio ciclo de vida
+    processingByPrinter[printerKey] = true;
+    processJobForPrinter(file, datos, printerKey); // intencionalmente sin await
   }
 }
 

@@ -71,6 +71,14 @@ class QueueManager {
       // Escribir archivo con lock para evitar race conditions
       await this.writeFileAtomic(jobPath, JSON.stringify(jobData, null, 2));
 
+      // Si la cola estaba vacía, resetear contadores de sesión para que el
+      // toast muestre números del lote actual (ej: "1/3") en vez de acumulados.
+      if (this.state.pending.length === 0 && this.state.processing.length === 0) {
+        this.state.completed = 0;
+        this.state.failed = 0;
+        this.state.enqueued = 0;
+      }
+
       // Actualizar estado en memoria
       this.state.pending.push(jobId);
       this.state.enqueued++;
