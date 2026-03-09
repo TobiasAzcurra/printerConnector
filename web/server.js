@@ -15,6 +15,11 @@ const fontCache = require("../src/font-renderer/cache");
 const textRenderer = require("../src/font-renderer/text-renderer");
 const { validarDatosParaPlantilla } = require("../src/templates");
 const QueueManager = require("../src/queue-manager");
+const { createLogger } = require("../src/logger");
+
+const log       = createLogger("Server");
+const logAssets = createLogger("Assets");
+const logFont   = createLogger("Font");
 
 const app = express();
 const server = http.createServer(app);
@@ -78,23 +83,23 @@ app.use(express.static(path.join(__dirname, "public")));
 // Crear directorios necesarios si no existen
 if (!fs.existsSync(assetsDir)) {
   fs.mkdirSync(assetsDir, { recursive: true });
-  console.log("📁 Carpeta de assets creada");
+  log.info("Carpeta de assets creada");
 }
 
 if (!fs.existsSync(fontsDir)) {
   fs.mkdirSync(fontsDir, { recursive: true });
-  console.log("📁 Carpeta de fuentes creada");
+  log.info("Carpeta de fuentes creada");
 }
 
 // Socket.IO - manejar conexiones
 io.on("connection", (socket) => {
-  console.log("🔌 Cliente WebSocket conectado:", socket.id);
+  log.info(`Cliente WebSocket conectado: ${socket.id}`);
 
   // Enviar estado actual inmediatamente al conectarse
   socket.emit("queue-update", queueManager.getSnapshot());
 
   socket.on("disconnect", () => {
-    console.log("🔌 Cliente WebSocket desconectado:", socket.id);
+    log.info(`Cliente WebSocket desconectado: ${socket.id}`);
   });
 });
 
@@ -240,7 +245,7 @@ app.post("/api/upload-logo-header", upload.single("logo"), async (req, res) => {
       path: rel,
     });
   } catch (err) {
-    console.error("Error al procesar logo de encabezado:", err);
+    logAssets.error("Error al procesar logo de encabezado:", err.message);
     res
       .status(500)
       .json({ error: "Error al procesar el logo", details: err.message });
@@ -277,7 +282,7 @@ app.post("/api/upload-logo-footer", upload.single("logo"), async (req, res) => {
       path: rel,
     });
   } catch (err) {
-    console.error("Error al procesar logo de pie:", err);
+    logAssets.error("Error al procesar logo de pie:", err.message);
     res
       .status(500)
       .json({ error: "Error al procesar el logo", details: err.message });
@@ -403,7 +408,7 @@ app.post("/api/imprimir", async (req, res) => {
       throw new Error(result.error || "Error al encolar");
     }
   } catch (err) {
-    console.error("Error al procesar solicitud de impresion:", err);
+    log.error("Error al procesar solicitud de impresión:", err.message);
     res.status(500).json({
       error: "Error al procesar la solicitud de impresion",
       details: err.message,
@@ -546,14 +551,14 @@ app.post("/api/upload-font", upload.single("font"), async (req, res) => {
         message: "Fuente subida y procesada correctamente",
       });
     } catch (err) {
-      console.error("Error al procesar la fuente:", err);
+      logFont.error("Error al procesar la fuente:", err.message);
       res.status(500).json({
         error: "Error al procesar la fuente",
         details: err.message,
       });
     }
   } catch (err) {
-    console.error("Error al subir fuente:", err);
+    logFont.error("Error al subir fuente:", err.message);
     res.status(500).json({
       error: "Error al subir fuente",
       details: err.message,
@@ -572,7 +577,7 @@ app.get("/api/font-info", (req, res) => {
       useFontTicket: config.useFontTicket || false,
     });
   } catch (err) {
-    console.error("Error al obtener información de fuente:", err);
+    logFont.error("Error al obtener información de fuente:", err.message);
     res.status(500).json({
       error: "Error al obtener información de fuente",
       details: err.message,
@@ -602,7 +607,7 @@ app.get("/api/font-preview", async (req, res) => {
     res.set("Content-Type", "image/png");
     res.send(imageBuffer);
   } catch (err) {
-    console.error("Error al generar vista previa:", err);
+    logFont.error("Error al generar vista previa:", err.message);
     res.status(500).json({
       error: "Error al generar vista previa",
       details: err.message,
@@ -627,7 +632,7 @@ app.delete("/api/delete-font", (req, res) => {
         : "No había fuente para eliminar",
     });
   } catch (err) {
-    console.error("Error al eliminar fuente:", err);
+    logFont.error("Error al eliminar fuente:", err.message);
     res.status(500).json({
       error: "Error al eliminar fuente",
       details: err.message,
@@ -638,9 +643,9 @@ app.delete("/api/delete-font", (req, res) => {
 setInterval(() => {
   try {
     fontCache.limpiarCache();
-    console.log("🧹 Caché de fuentes limpiado");
+    logFont.debug("Caché de fuentes limpiado");
   } catch (err) {
-    console.error("Error al limpiar caché:", err);
+    logFont.error("Error al limpiar caché de fuentes:", err.message);
   }
 }, 24 * 60 * 60 * 1000);
 
@@ -882,7 +887,7 @@ app.post("/api/assets/import", upload.single("file"), async (req, res) => {
 
     throw new Error(`kind no soportado: ${kind}`);
   } catch (err) {
-    console.error("Error en /api/assets/import:", err);
+    logAssets.error("Error en /api/assets/import:", err.message);
     const code = err.code || "INGEST_ERROR";
     res.status(400).json({ error: code, details: err.message });
   }
@@ -890,6 +895,6 @@ app.post("/api/assets/import", upload.single("file"), async (req, res) => {
 
 // Iniciar el servidor con Socket.IO
 server.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`WebSocket escuchando conexiones`);
+  log.info(`Servidor web corriendo en http://localhost:${PORT}`);
+  log.info("WebSocket listo para conexiones");
 });

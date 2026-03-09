@@ -2,6 +2,9 @@
 const fs = require("fs");
 const path = require("path");
 const lockfile = require("proper-lockfile");
+const { createLogger } = require("./logger");
+
+const log = createLogger("QueueMgr");
 
 class QueueManager {
   constructor(queueDir, processingDir) {
@@ -54,7 +57,7 @@ class QueueManager {
 
       this.notifyListeners();
     } catch (err) {
-      console.error("Error sincronizando desde disco:", err);
+      log.error("Error sincronizando estado desde disco:", err.message);
     }
   }
 
@@ -83,9 +86,7 @@ class QueueManager {
       this.state.pending.push(jobId);
       this.state.enqueued++;
 
-      console.log(
-        `✅ Job ${jobId} encolado. Posición: ${this.state.pending.length}`
-      );
+      log.info(`Job encolado: ${jobId} — posición ${this.state.pending.length}`);
 
       this.notifyListeners();
 
@@ -96,7 +97,7 @@ class QueueManager {
         total: this.state.pending.length + this.state.processing.length,
       };
     } catch (err) {
-      console.error(`❌ Error encolando job ${jobId}:`, err);
+      log.error(`Error encolando job ${jobId}:`, err.message);
       return { success: false, error: err.message };
     }
   }
@@ -122,9 +123,7 @@ class QueueManager {
     this.state.processing = this.state.processing.filter((id) => id !== jobId);
     this.state.completed++;
 
-    console.log(
-      `✅ Job ${jobId} completado. Restantes: ${this.getTotalJobs()}`
-    );
+    log.info(`Job completado: ${jobId} — restantes: ${this.getTotalJobs()}`);
 
     this.notifyListeners();
   }
@@ -134,7 +133,7 @@ class QueueManager {
     this.state.processing = this.state.processing.filter((id) => id !== jobId);
     this.state.failed++;
 
-    console.error(`❌ Job ${jobId} falló:`, error);
+    log.error(`Job fallido: ${jobId}`, error);
 
     this.notifyListeners();
   }
@@ -178,7 +177,7 @@ class QueueManager {
       try {
         listener(snapshot);
       } catch (err) {
-        console.error("Error en listener:", err);
+        log.error("Error en listener de estado:", err.message);
       }
     });
   }

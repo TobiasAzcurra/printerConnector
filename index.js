@@ -3,6 +3,14 @@ const fs   = require("fs");
 const path = require("path");
 const net  = require("net");
 const printerRenderer = require("./src/printer-renderer");
+const { createLogger } = require("./src/logger");
+
+const logConfig   = createLogger("Config");
+const logQueue    = createLogger("Queue");
+const logPrinter  = createLogger("Printer");
+const logConfirm  = createLogger("Confirm");
+const logNotify   = createLogger("Notify");
+const logRecovery = createLogger("Recovery");
 
 const ROOT_DIR = __dirname;
 const configPath      = path.join(ROOT_DIR, "config.json");
@@ -35,9 +43,7 @@ function cargarConfig() {
         2
       )
     );
-    console.log(
-      "No se encontró config.json. Se creó uno por defecto. Editalo desde el navegador."
-    );
+    logConfig.warn("No se encontró config.json. Se creó uno por defecto. Editalo desde el navegador.");
     process.exit(0);
   }
 
@@ -51,7 +57,7 @@ function cargarConfig() {
     if (!config.assets) config.assets = {};
 
 
-    console.log("Config cargada:", {
+    logConfig.info("Config cargada:", {
       ...config,
       assets: Object.fromEntries(
         Object.entries(config.assets || {}).map(([k, v]) => [
@@ -61,7 +67,7 @@ function cargarConfig() {
       ),
     });
   } catch (err) {
-    console.error("Error al leer config.json:", err);
+    logConfig.error("Error al leer config.json:", err);
     process.exit(1);
   }
 }
@@ -95,12 +101,12 @@ async function confirmPrintOnFirestore(datos, status) {
   const orderId = datos.orderId;
 
   if (!logId || !orderId) {
-    console.warn("[Confirm] Job sin logId u orderId — omitiendo confirmación");
+    logConfirm.warn("Job sin logId u orderId — omitiendo confirmación");
     return;
   }
 
   if (!config.confirmPrintUrl || !config.enterpriseId || !config.sucursalId || !config.apiKey) {
-    console.warn("[Confirm] Config incompleta (faltan confirmPrintUrl, enterpriseId, sucursalId o apiKey)");
+    logConfirm.warn("Config incompleta (faltan confirmPrintUrl, enterpriseId, sucursalId o apiKey)");
     return;
   }
 
@@ -113,9 +119,9 @@ async function confirmPrintOnFirestore(datos, status) {
   try {
     await callConfirmPrint({ logId, orderId, status });
     fs.unlinkSync(pendingPath);
-    console.log(`[Confirm] ✅ Firestore confirmado: ${logId} → ${status}`);
+    logConfirm.info(`Firestore confirmado: ${logId} → ${status}`);
   } catch (err) {
-    console.warn(`[Confirm] ⚠️ Falló confirmación (se reintentará en background): ${err.message}`);
+    logConfirm.warn(`Falló confirmación, se reintentará en background: ${err.message}`);
   }
 }
 
@@ -126,7 +132,7 @@ async function processPendingConfirmations() {
   const files = fs.readdirSync(confirmDir).filter((f) => f.endsWith(".json"));
   if (files.length === 0) return;
 
-  console.log(`[Confirm] Procesando ${files.length} confirmaciones pendientes...`);
+  logConfirm.info(`Procesando ${files.length} confirmaciones pendientes...`);
 
   for (const file of files) {
     const filePath = path.join(confirmDir, file);
@@ -140,17 +146,17 @@ async function processPendingConfirmations() {
     try {
       await callConfirmPrint(data);
       fs.unlinkSync(filePath);
-      console.log(`[Confirm] ✅ Confirmación pendiente resuelta: ${data.logId}`);
+      logConfirm.info(`Confirmación pendiente resuelta: ${data.logId}`);
     } catch (err) {
       data.retries = (data.retries || 0) + 1;
       if (data.retries > 20) {
-        console.error(`[Confirm] ⛔ Confirmación abandonada tras 20 intentos: ${data.logId}`);
+        logConfirm.error(`Confirmación abandonada tras 20 intentos: ${data.logId}`);
         const abandonedDir = path.join(confirmDir, "abandoned");
         if (!fs.existsSync(abandonedDir)) fs.mkdirSync(abandonedDir, { recursive: true });
         fs.renameSync(filePath, path.join(abandonedDir, file));
       } else {
         fs.writeFileSync(filePath, JSON.stringify(data));
-        console.warn(`[Confirm] ⚠️ Reintento ${data.retries}/20 fallido para ${data.logId}: ${err.message}`);
+        logConfirm.warn(`Reintento ${data.retries}/20 fallido para ${data.logId}: ${err.message}`);
       }
     }
   }
@@ -165,16 +171,16 @@ function recoverOrphanedJobs() {
   const orphans = fs.readdirSync(processingDir).filter((f) => f.endsWith(".json"));
   if (orphans.length === 0) return;
 
-  console.log(`⚠️  Recuperando ${orphans.length} job(s) huérfano(s) de print-processing/...`);
+  logRecovery.warn(`Recuperando ${orphans.length} job(s) huérfano(s) de print-processing/`);
 
   for (const file of orphans) {
     const from = path.join(processingDir, file);
     const to   = path.join(queueDir, file);
     try {
       fs.renameSync(from, to);
-      console.log(`  ↩️  ${file} → print-queue/`);
+      logRecovery.info(`${file} → print-queue/`);
     } catch (err) {
-      console.error(`  ❌ No se pudo recuperar ${file}:`, err.message);
+      logRecovery.error(`No se pudo recuperar ${file}:`, err.message);
     }
   }
 }
@@ -183,10 +189,10 @@ function recoverOrphanedJobs() {
    Reinicio del conector
    ========================== */
 function reiniciarConector() {
-  console.log("Recargando configuración...");
+  logConfig.info("Recargando configuración...");
   cargarConfig();
   recoverOrphanedJobs();
-  processPendingConfirmations().catch(console.error);
+  processPendingConfirmations().catch((err) => logConfirm.error("Error en procesamiento de confirmaciones:", err.message));
   processPrintQueue();
 }
 
@@ -195,32 +201,28 @@ function reiniciarConector() {
    ========================== */
 async function handleImpresion(datos) {
   const jobId = datos._templateInfo?.jobId || "Sin ID";
-  console.log("Trabajo de impresión recibido:", jobId);
+  logPrinter.info(`Job recibido: ${jobId}`);
 
   const template = datos._template;
 
   if (!template || !Array.isArray(template.sections)) {
-    console.error(
-      `❌ Job "${jobId}" rechazado: el payload no incluye _template.sections.`
-    );
+    logPrinter.error(`Job "${jobId}" rechazado: payload sin _template.sections`);
     return false;
   }
 
-  console.log(
-    `📐 Template: ${datos._templateInfo?.id || "sin id"} — ${template.sections.length} secciones`
-  );
+  logPrinter.debug(`Template: ${datos._templateInfo?.id || "sin id"} — ${template.sections.length} secciones`);
 
   try {
     const ok = await printerRenderer.imprimirConPlantilla(config, datos, template);
     if (ok) {
-      console.log(`Impresión completada exitosamente: ${jobId}`);
+      logPrinter.info(`Impresión completada: ${jobId}`);
       return true;
     } else {
-      console.error(`Error durante la impresión: ${jobId}`);
+      logPrinter.error(`Impresión falló (renderer devolvió false): ${jobId}`);
       return false;
     }
   } catch (err) {
-    console.error(`Error al imprimir ${jobId}:`, err);
+    logPrinter.error(`Error al imprimir ${jobId}:`, err.message);
     return false;
   }
 }
@@ -242,7 +244,7 @@ async function notifyJobProcessing(jobId, datos, attempt = 1) {
       body: JSON.stringify(payload),
     });
   } catch (err) {
-    console.error("No se pudo notificar processing:", err.message);
+    logNotify.error("No se pudo notificar processing:", err.message);
   }
 }
 
@@ -261,7 +263,7 @@ async function notifyJobCompleted(jobId, datos) {
       body: JSON.stringify(payload),
     });
   } catch (err) {
-    console.error("No se pudo notificar completado:", err.message);
+    logNotify.error("No se pudo notificar completado:", err.message);
   }
 }
 
@@ -286,7 +288,7 @@ async function notifyJobFailed(jobId, error, datos) {
       body: JSON.stringify(payload),
     });
   } catch (err) {
-    console.error("No se pudo notificar fallo:", err.message);
+    logNotify.error("No se pudo notificar fallo:", err.message);
   }
 }
 
@@ -325,7 +327,7 @@ async function processJobFile(file, datos) {
 
   if (!success) throw new Error("HandleImpresion devolvió falso indicando fallo interno");
 
-  console.log(`  ✅ Completado en ${duration}ms (${jobId})`);
+  logQueue.info(`Completado en ${duration}ms — ${jobId}`);
   fs.unlinkSync(processingPath);
   delete retryStates[file];
   await notifyJobCompleted(jobId, datos);
@@ -346,7 +348,7 @@ async function processJobForPrinter(file, datos, printerKey) {
   } catch (err) {
     if (err.message === "Job ya procesado por otro ciclo") return;
 
-    console.error(`  ❌ Error procesando ${jobId} [${printerKey}]: ${err.message}`);
+    logQueue.error(`Error procesando ${jobId} [${printerKey}]: ${err.message}`);
 
     if (!retryStates[file]) retryStates[file] = { count: 0, nextRetryTime: 0 };
     retryStates[file].count += 1;
@@ -354,13 +356,13 @@ async function processJobForPrinter(file, datos, printerKey) {
     if (retryStates[file].count <= MAX_RETRIES) {
       const delayMs = 5000 * Math.pow(2, retryStates[file].count - 1);
       retryStates[file].nextRetryTime = Date.now() + delayMs;
-      console.log(`  🔄 Reintento ${retryStates[file].count}/${MAX_RETRIES} en ${delayMs / 1000}s`);
+      logQueue.warn(`Reintento ${retryStates[file].count}/${MAX_RETRIES} en ${delayMs / 1000}s — ${jobId}`);
       if (fs.existsSync(processingPath)) fs.renameSync(processingPath, jobPath);
     } else {
-      console.error(`  ⛔ Reintentos agotados para ${jobId}. Definitivamente fallido.`);
+      logQueue.error(`Reintentos agotados — ${jobId} marcado como fallido definitivo`);
       let failedDatos = {};
       try { failedDatos = JSON.parse(fs.readFileSync(processingPath, "utf8")); } catch (e) {
-        console.error(`  No se pudieron leer los datos para notificar:`, e.message);
+        logQueue.error(`No se pudieron leer los datos del job fallido:`, e.message);
       }
       await notifyJobFailed(jobId, err, failedDatos);
       await confirmPrintOnFirestore(failedDatos, "failed_printer");
@@ -369,7 +371,7 @@ async function processJobForPrinter(file, datos, printerKey) {
       if (!fs.existsSync(failedDir)) fs.mkdirSync(failedDir, { recursive: true });
       if (fs.existsSync(processingPath)) {
         try { fs.renameSync(processingPath, path.join(failedDir, file)); } catch (e) {
-          console.error(`  No se pudo mover a fallidos:`, e.message);
+          logQueue.error(`No se pudo mover job a print-failed/:`, e.message);
         }
       }
     }
@@ -388,13 +390,13 @@ function processPrintQueue() {
   try {
     files = fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).sort();
   } catch (err) {
-    console.error("Error leyendo cola:", err);
+    logQueue.error("Error leyendo directorio de cola:", err.message);
     return;
   }
 
   if (files.length === 0) return;
 
-  console.log(`\n--- Evaluando Cola: ${files.length} trabajos ---`);
+  logQueue.debug(`Evaluando cola: ${files.length} trabajo(s) pendiente(s)`);
 
   for (const file of files) {
     // Saltar si el job está en cooldown de retry
@@ -430,7 +432,7 @@ fs.watchFile(configPath, () => {
   }
   lastConfigChange = now;
 
-  console.log("config.json modificado. Recargando...");
+  logConfig.info("config.json modificado — recargando");
   reiniciarConector(true);
 });
 
@@ -444,37 +446,22 @@ function crearEstructuraDirectorios() {
   const logosDir = path.join(assetsDir, "logos");
   const failedDir = path.join(ROOT_DIR, "print-failed");
 
-  if (!fs.existsSync(assetsDir)) {
-    fs.mkdirSync(assetsDir, { recursive: true });
-    console.log("Carpeta de assets creada");
-  }
-  if (!fs.existsSync(fontsDir)) {
-    fs.mkdirSync(fontsDir, { recursive: true });
-    console.log("Carpeta de fuentes creada");
-  }
-  if (!fs.existsSync(fontsCacheDir)) {
-    fs.mkdirSync(fontsCacheDir, { recursive: true });
-    console.log("Carpeta de caché de fuentes creada");
-  }
-  if (!fs.existsSync(logosDir)) {
-    fs.mkdirSync(logosDir, { recursive: true });
-    console.log("Carpeta de logos creada");
-  }
-  if (!fs.existsSync(queueDir)) {
-    fs.mkdirSync(queueDir, { recursive: true });
-    console.log("Carpeta de cola de impresión creada");
-  }
-  if (!fs.existsSync(processingDir)) {
-    fs.mkdirSync(processingDir, { recursive: true });
-    console.log("Carpeta de procesamiento creada");
-  }
-  if (!fs.existsSync(failedDir)) {
-    fs.mkdirSync(failedDir, { recursive: true });
-    console.log("Carpeta de fallidos creada");
-  }
-  if (!fs.existsSync(confirmDir)) {
-    fs.mkdirSync(confirmDir, { recursive: true });
-    console.log("Carpeta de confirmaciones pendientes creada");
+  const dirs = [
+    [assetsDir,     "assets"],
+    [fontsDir,      "fonts"],
+    [fontsCacheDir, "fonts/cache"],
+    [logosDir,      "logos"],
+    [queueDir,      "print-queue"],
+    [processingDir, "print-processing"],
+    [failedDir,     "print-failed"],
+    [confirmDir,    "pending-confirmations"],
+  ];
+
+  for (const [dir, name] of dirs) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      logConfig.info(`Directorio creado: ${name}/`);
+    }
   }
 
   try {
@@ -500,7 +487,7 @@ setInterval(() => {
 
 // Retry de confirmaciones pendientes en Firestore cada 30 segundos
 setInterval(() => {
-  processPendingConfirmations().catch(console.error);
+  processPendingConfirmations().catch((err) => logConfirm.error("Error en procesamiento de confirmaciones:", err.message));
 }, 30000);
 
 
