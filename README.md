@@ -4,44 +4,146 @@ Este conector corre en la máquina del cliente junto a la impresora térmica. Su
 
 ---
 
-## Setup (nueva instalación)
+## Instalación en local de cliente
+
+### Paso 1 — Prerequisitos en la PC del cliente
+
+- Instalar **Node.js 18+**: https://nodejs.org → LTS → Windows Installer
+- Verificar: abrir CMD y correr `node -v` (debe mostrar v18 o superior)
+
+### Paso 2 — Copiar el conector
 
 ```bash
-# 1. Clonar el repo
 git clone <url-del-repo>
 cd printerConnector
-
-# 2. Instalar dependencias
 npm install
+```
 
-# 3. Crear la configuración local
+> Si la PC no tiene Git, copiar la carpeta por pendrive. Igual hay que correr `npm install` adentro.
+
+### Paso 3 — Conseguir los valores de configuración
+
+Antes de tocar la PC del cliente, tener estos datos a mano:
+
+| Valor | Dónde conseguirlo |
+|---|---|
+| `enterpriseId` | Firebase Console → Firestore → colección `absoluteClientes` → el ID del documento de la empresa |
+| `sucursalId` | Dentro del doc de la empresa → subcolección `sucursales` → el ID del documento |
+| `apiKey` | Dentro del doc de la sucursal → campo `printerApiKey` |
+| `confirmPrintUrl` | Firebase Console → Functions → buscar `confirmPrint` → copiar la URL |
+| `clienteId` | Slug del cliente, cualquier string sin espacios (ej: `"anhelo"`) |
+
+### Paso 4 — Crear la configuración
+
+```bash
 cp config.example.json config.json
-# Editar config.json con los valores del cliente:
-#   enterpriseId    — ID de la empresa en Firestore
-#   sucursalId      — ID de la sucursal en Firestore
-#   apiKey          — API key del proyecto Firebase
-#   confirmPrintUrl — URL de la Cloud Function confirmPrint
-#   clienteId       — slug del cliente (para assets)
+```
 
-# 4. Levantar los procesos
+Editar `config.json` con los valores del paso anterior. Ejemplo:
 
-# Opción A — desarrollo (dos terminales separadas)
-node web/server.js
-node index.js
+```json
+{
+  "enterpriseId": "abc123",
+  "sucursalId": "xyz789",
+  "apiKey": "la-api-key-de-la-sucursal",
+  "confirmPrintUrl": "https://us-central1-absolute-97d92.cloudfunctions.net/confirmPrint",
+  "clienteId": "nombre-del-cliente",
+  "printerIP": "192.168.1.100",
+  "printerPort": 9100,
+  "useHeaderLogo": true,
+  "useFooterLogo": true,
+  "useFontTicket": false,
+  "ticketWidth": 48,
+  "connectorSecret": "",
+  "assets": {}
+}
+```
 
-# Opción B — producción con PM2 (un solo comando, autoarranque con Windows)
+> `printerIP` se puede dejar en `""` por ahora — se completa después. `connectorSecret` se genera automáticamente al primer arranque.
+
+### Paso 5 — Encontrar la IP de la impresora
+
+La impresora debe estar encendida y conectada a la red del local.
+
+**Opción A — desde la propia impresora:** Imprimir una hoja de configuración (generalmente manteniendo presionado el botón de avance de papel al encender). La IP aparece impresa.
+
+**Opción B — desde CMD en la PC del cliente:**
+```cmd
+arp -a
+```
+Buscar en la lista una IP en el rango de la red local (ej: `192.168.1.x`). Probar conectividad:
+```cmd
+Test-NetConnection -ComputerName 192.168.1.100 -Port 9100
+```
+Si `TcpTestSucceeded` dice `True`, esa es la impresora.
+
+Una vez confirmada la IP, escribirla en `config.json` → campo `printerIP`.
+
+### Paso 6 — Levantar con PM2 (producción)
+
+```bash
 npm install -g pm2
+npm install -g pm2-windows-startup
 pm2 start ecosystem.config.js
 pm2 save
-
-# Para autoarranque al iniciar Windows:
-npm install -g pm2-windows-startup
 pm2-startup install
 ```
 
-> **Requisitos:** Node.js 18+. La(s) impresora(s) debe estar en la misma red local y accesible por TCP.
+Esto levanta el conector automáticamente cada vez que enciende la PC, sin necesidad de abrir ninguna terminal.
 
-Una vez levantado, la configuración visual (logos, fuente TTF) se gestiona desde el panel web en `localhost:4040`.
+### Paso 7 — Verificar que todo funciona
+
+**1. Verificar que el conector está corriendo:**
+```bash
+pm2 status
+```
+Ambos procesos (`printer-web` y `printer-connector`) deben estar en estado `online`.
+
+**2. Verificar la config desde el navegador:**
+
+Abrir `http://localhost:4040/api/config` — debe devolver un JSON con los datos de configuración (sin el `connectorSecret`).
+
+**3. Verificar conectividad con la impresora:**
+
+Abrir `http://localhost:4040` — el panel web muestra el estado de la red. Desde ahí se pueden subir logos y la fuente TTF.
+
+**4. Mandar un ticket de prueba:**
+
+Desde la UI del frontend, presionar "Imprimir" en cualquier pedido. Si el ticket sale, la instalación es correcta.
+
+**5. Verificar logs en caso de error:**
+```bash
+pm2 logs printer-connector --lines 50
+pm2 logs printer-web --lines 50
+```
+
+### Comandos útiles de PM2
+
+```bash
+pm2 status                        # Ver estado de todos los procesos
+pm2 logs printer-connector        # Ver logs en tiempo real
+pm2 restart printer-connector     # Reiniciar el conector (ej: después de cambiar config)
+pm2 restart all                   # Reiniciar todo
+pm2 stop all                      # Detener todo
+```
+
+> **Firewall de Windows:** Si el frontend corre en otra PC de la red y no puede conectarse al conector, agregar una regla de entrada en Windows Defender Firewall para el puerto TCP 4040.
+
+---
+
+## Setup rápido (desarrollo local)
+
+```bash
+git clone <url-del-repo>
+cd printerConnector
+npm install
+cp config.example.json config.json
+# Completar los valores en config.json (ver sección anterior)
+
+# Levantar en dos terminales separadas
+node web/server.js
+node index.js
+```
 
 ---
 
