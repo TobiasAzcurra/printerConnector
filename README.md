@@ -16,7 +16,12 @@ npm install
 
 # 3. Crear la configuración local
 cp config.example.json config.json
-# Editar config.json con el clienteId correspondiente
+# Editar config.json con los valores del cliente:
+#   enterpriseId    — ID de la empresa en Firestore
+#   sucursalId      — ID de la sucursal en Firestore
+#   apiKey          — API key del proyecto Firebase
+#   confirmPrintUrl — URL de la Cloud Function confirmPrint
+#   clienteId       — slug del cliente (para assets)
 
 # 4. Levantar los procesos
 
@@ -65,8 +70,12 @@ Emitir el evento `"imprimir"` al backend, quien lo redirige al conector vía soc
     "width": 48
   },
   "_templateInfo": {
-    "id": "ticket-cocina"
+    "id": "ticket-cocina",
+    "jobId": "1711234567890-abc123",
+    "logId": "uuid-del-printlog-en-firestore"
   },
+  "orderId": "uuid-del-pedido",
+  "printerName": "Cocina",
   "_template": {
     "sections": [
       { "type": "image",  "src": "data:image/png;base64,..." },
@@ -80,6 +89,18 @@ Emitir el evento `"imprimir"` al backend, quien lo redirige al conector vía soc
   }
 }
 ```
+
+| Campo | Requerido | Descripción |
+|---|---|---|
+| `_printer.ip` | ✅ | IP de la impresora térmica en la red local |
+| `_printer.port` | — | Puerto TCP (default: `9100`) |
+| `_printer.width` | — | Ancho del papel en caracteres (`48` o `32`, default: `48`) |
+| `_templateInfo.id` | ✅ | Identificador del template (para logs) |
+| `_templateInfo.jobId` | ✅ | ID único del job — usado para tracking en WebSocket |
+| `_templateInfo.logId` | ✅ | ID del documento `printLogs` en Firestore — el conector lo confirma vía Cloud Function |
+| `orderId` | ✅ | ID del pedido — propagado en todos los eventos WebSocket |
+| `printerName` | ✅ | Nombre de la impresora — propagado en eventos WebSocket para identificarla en el frontend |
+| `_template.sections` | ✅ | Array de secciones a imprimir, en orden |
 
 El conector **imprime las secciones en el orden exacto en que las recibe**, de arriba hacia abajo.
 
@@ -152,6 +173,22 @@ El campo `src` acepta:
   "hint": "El payload debe incluir _printer.ip y _template.sections con tipo text, image o spacer"
 }
 ```
+
+---
+
+## Eventos WebSocket
+
+El conector emite eventos vía Socket.io al servidor web (`localhost:4040`), que los reenvía al frontend conectado.
+
+| Evento | Cuándo se emite | Payload principal |
+|---|---|---|
+| `queue-update` | Cada vez que cambia el estado de la cola | `{ pending, processing, completed, failed, total, enqueued }` |
+| `job-queued` | Cuando un job entra a la cola | `{ jobId, orderId, printerName, position }` |
+| `job-processing` | Cuando el worker empieza a procesar (incluye reintentos) | `{ jobId, orderId, printerName, attempt }` |
+| `job-success` | Cuando el ticket imprimió correctamente | `{ jobId, orderId, printerName, logId }` |
+| `job-error` | Cuando se agotan los reintentos y el job falla definitivamente | `{ jobId, orderId, printerName, logId, error }` |
+
+El frontend usa `logId` de `job-success` y `job-error` para saber si puede cambiar el estado del pedido y para habilitar la reimpresión selectiva.
 
 ---
 
