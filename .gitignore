@@ -16,6 +16,7 @@ assets/fonts/cache/
 print-queue/
 print-processing/
 print-failed/
+pending-confirmations/
 temp/
 
 # Archivos temporales de Node / OS
