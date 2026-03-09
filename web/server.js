@@ -348,7 +348,22 @@ app.post("/api/imprimir", async (req, res) => {
   }
 
   try {
-    const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const logId = data._templateInfo?.logId;
+
+    // Deduplicación: si este logId ya está en cola o procesándose, ignorar silenciosamente.
+    // El filename incluye el logId como sufijo (ej: 1711234567890-{logId}.json)
+    // para que la búsqueda sea O(n) sobre nombres de archivo sin leer contenido.
+    if (logId) {
+      const inQueue      = fs.existsSync(queueDir)      && fs.readdirSync(queueDir).some((f) => f.endsWith(`-${logId}.json`));
+      const inProcessing = fs.existsSync(processingDir) && fs.readdirSync(processingDir).some((f) => f.endsWith(`-${logId}.json`));
+      if (inQueue || inProcessing) {
+        return res.json({ success: true, duplicate: true, message: "Job ya en cola" });
+      }
+    }
+
+    const jobId = logId
+      ? `${Date.now()}-${logId}`
+      : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     const datosParaImprimir = {
       ...data,

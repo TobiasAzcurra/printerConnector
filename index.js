@@ -5,9 +5,10 @@ const net  = require("net");
 const printerRenderer = require("./src/printer-renderer");
 
 const ROOT_DIR = __dirname;
-const configPath = path.join(ROOT_DIR, "config.json");
-const queueDir = path.join(ROOT_DIR, "print-queue");
-const processingDir = path.join(ROOT_DIR, "print-processing");
+const configPath      = path.join(ROOT_DIR, "config.json");
+const queueDir        = path.join(ROOT_DIR, "print-queue");
+const processingDir   = path.join(ROOT_DIR, "print-processing");
+const confirmDir      = path.join(ROOT_DIR, "pending-confirmations");
 
 const API_BASE = "http://localhost:4040";
 
@@ -67,6 +68,96 @@ function cargarConfig() {
 }
 
 /* ==========================
+   Confirmación directa en Firestore vía Cloud Function
+   ========================== */
+
+async function callConfirmPrint({ logId, orderId, status }) {
+  const res = await fetch(config.confirmPrintUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      logId,
+      enterpriseId: config.enterpriseId,
+      sucursalId:   config.sucursalId,
+      orderId,
+      status,
+      apiKey:       config.apiKey,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `HTTP ${res.status}`);
+  }
+}
+
+async function confirmPrintOnFirestore(datos, status) {
+  const logId   = datos._templateInfo?.logId;
+  const orderId = datos.orderId;
+
+  if (!logId || !orderId) {
+    console.warn("[Confirm] Job sin logId u orderId — omitiendo confirmación");
+    return;
+  }
+
+  if (!config.confirmPrintUrl || !config.enterpriseId || !config.sucursalId || !config.apiKey) {
+    console.warn("[Confirm] Config incompleta (faltan confirmPrintUrl, enterpriseId, sucursalId o apiKey)");
+    return;
+  }
+
+  // Escribir a pending-confirmations antes de intentar la llamada.
+  // Si la llamada falla, el archivo queda para reintento automático.
+  if (!fs.existsSync(confirmDir)) fs.mkdirSync(confirmDir, { recursive: true });
+  const pendingPath = path.join(confirmDir, `${logId}.json`);
+  fs.writeFileSync(pendingPath, JSON.stringify({ logId, orderId, status, retries: 0, createdAt: Date.now() }));
+
+  try {
+    await callConfirmPrint({ logId, orderId, status });
+    fs.unlinkSync(pendingPath);
+    console.log(`[Confirm] ✅ Firestore confirmado: ${logId} → ${status}`);
+  } catch (err) {
+    console.warn(`[Confirm] ⚠️ Falló confirmación (se reintentará en background): ${err.message}`);
+  }
+}
+
+async function processPendingConfirmations() {
+  if (!fs.existsSync(confirmDir)) return;
+  if (!config.confirmPrintUrl || !config.enterpriseId || !config.sucursalId || !config.apiKey) return;
+
+  const files = fs.readdirSync(confirmDir).filter((f) => f.endsWith(".json"));
+  if (files.length === 0) return;
+
+  console.log(`[Confirm] Procesando ${files.length} confirmaciones pendientes...`);
+
+  for (const file of files) {
+    const filePath = path.join(confirmDir, file);
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch {
+      continue;
+    }
+
+    try {
+      await callConfirmPrint(data);
+      fs.unlinkSync(filePath);
+      console.log(`[Confirm] ✅ Confirmación pendiente resuelta: ${data.logId}`);
+    } catch (err) {
+      data.retries = (data.retries || 0) + 1;
+      if (data.retries > 20) {
+        console.error(`[Confirm] ⛔ Confirmación abandonada tras 20 intentos: ${data.logId}`);
+        const abandonedDir = path.join(confirmDir, "abandoned");
+        if (!fs.existsSync(abandonedDir)) fs.mkdirSync(abandonedDir, { recursive: true });
+        fs.renameSync(filePath, path.join(abandonedDir, file));
+      } else {
+        fs.writeFileSync(filePath, JSON.stringify(data));
+        console.warn(`[Confirm] ⚠️ Reintento ${data.retries}/20 fallido para ${data.logId}: ${err.message}`);
+      }
+    }
+  }
+}
+
+/* ==========================
    Recuperar jobs huérfanos
    ========================== */
 function recoverOrphanedJobs() {
@@ -96,6 +187,7 @@ function reiniciarConector() {
   console.log("Recargando configuración...");
   cargarConfig();
   recoverOrphanedJobs();
+  processPendingConfirmations().catch(console.error);
   processPrintQueue();
 }
 
@@ -276,11 +368,10 @@ async function processPrintQueue() {
           console.log(`  ✅ Completado en ${duration}ms (${jobId})`);
           fs.unlinkSync(processingPath);
 
-          // Si pasó, evitamos ensuciar la memoria
           delete retryStates[file];
 
-          // Notificar al servidor que completó
           await notifyJobCompleted(jobId, datos);
+          await confirmPrintOnFirestore(datos, "printed");
         } else {
           throw new Error("HandleImpresion devolvió falso indicando fallo interno");
         }
@@ -318,6 +409,7 @@ async function processPrintQueue() {
             console.error(`  No se pudieron leer los datos para notificar:`, e.message);
           }
           await notifyJobFailed(jobId, err, failedDatos);
+          await confirmPrintOnFirestore(failedDatos, "failed_printer");
           delete retryStates[file];
 
           // Mover a carpeta de fallidos
@@ -400,6 +492,10 @@ function crearEstructuraDirectorios() {
     fs.mkdirSync(failedDir, { recursive: true });
     console.log("Carpeta de fallidos creada");
   }
+  if (!fs.existsSync(confirmDir)) {
+    fs.mkdirSync(confirmDir, { recursive: true });
+    console.log("Carpeta de confirmaciones pendientes creada");
+  }
 
   try {
     if (fs.existsSync(configPath)) {
@@ -421,6 +517,11 @@ function crearEstructuraDirectorios() {
 setInterval(() => {
   processPrintQueue();
 }, 2000);
+
+// Retry de confirmaciones pendientes en Firestore cada 30 segundos
+setInterval(() => {
+  processPendingConfirmations().catch(console.error);
+}, 30000);
 
 
 /* ==========================
