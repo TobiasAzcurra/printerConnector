@@ -1,7 +1,14 @@
 {
+  "enterpriseId": "YOUR_ENTERPRISE_ID",
+  "sucursalId": "YOUR_SUCURSAL_ID",
+  "apiKey": "YOUR_API_KEY",
+  "confirmPrintUrl": "https://us-central1-YOUR_PROJECT.cloudfunctions.net/confirmPrint",
   "clienteId": "nombre-del-cliente",
+  "printerIP": "192.168.1.100",
+  "printerPort": 9100,
   "useHeaderLogo": true,
   "useFooterLogo": true,
   "useFontTicket": false,
+  "ticketWidth": 48,
   "assets": {}
 }
