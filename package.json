@@ -14,7 +14,8 @@
     "verify:full": "node scripts/verify-prints.js --full",
     "test:orphan": "node scripts/test-orphan-recovery.js",
     "test:offline": "node scripts/test-printer-offline.js",
-    "test:recovery": "node scripts/test-recovery.js"
+    "test:recovery": "node scripts/test-recovery.js",
+    "test": "node --test test/**/*.test.js"
   },
   "bin": "index.js",
   "pkg": {

@@ -14,11 +14,13 @@ const logRecovery = createLogger("Recovery");
 
 const ROOT_DIR = __dirname;
 const configPath      = path.join(ROOT_DIR, "config.json");
-const queueDir        = path.join(ROOT_DIR, "print-queue");
-const processingDir   = path.join(ROOT_DIR, "print-processing");
+const queueDir        = process.env.TEST_QUEUE_DIR      ?? path.join(ROOT_DIR, "print-queue");
+const processingDir   = process.env.TEST_PROCESSING_DIR ?? path.join(ROOT_DIR, "print-processing");
 const confirmDir      = path.join(ROOT_DIR, "pending-confirmations");
 
-const API_BASE = "http://localhost:4040";
+const API_BASE            = process.env.API_BASE            ?? "http://localhost:4040";
+const MAX_RETRIES         = parseInt(process.env.TEST_MAX_RETRIES      ?? "5",    10);
+const BASE_RETRY_DELAY_MS = parseInt(process.env.TEST_RETRY_DELAY_MS   ?? "5000", 10);
 
 let config = {};
 
@@ -295,7 +297,6 @@ async function notifyJobFailed(jobId, error, datos) {
 /* ==========================
    Estado de Reintentos (Retries)
    ========================== */
-const MAX_RETRIES = 5;
 const retryStates = {}; // { [filename]: { count, nextRetryTime } }
 
 // Una impresora procesa un job a la vez — todas las impresoras corren en paralelo
@@ -354,7 +355,7 @@ async function processJobForPrinter(file, datos, printerKey) {
     retryStates[file].count += 1;
 
     if (retryStates[file].count <= MAX_RETRIES) {
-      const delayMs = 5000 * Math.pow(2, retryStates[file].count - 1);
+      const delayMs = BASE_RETRY_DELAY_MS * Math.pow(2, retryStates[file].count - 1);
       retryStates[file].nextRetryTime = Date.now() + delayMs;
       logQueue.warn(`Reintento ${retryStates[file].count}/${MAX_RETRIES} en ${delayMs / 1000}s — ${jobId}`);
       if (fs.existsSync(processingPath)) fs.renameSync(processingPath, jobPath);
@@ -367,7 +368,7 @@ async function processJobForPrinter(file, datos, printerKey) {
       await notifyJobFailed(jobId, err, failedDatos);
       await confirmPrintOnFirestore(failedDatos, "failed_printer");
       delete retryStates[file];
-      const failedDir = path.join(ROOT_DIR, "print-failed");
+      const failedDir = process.env.TEST_FAILED_DIR ?? path.join(ROOT_DIR, "print-failed");
       if (!fs.existsSync(failedDir)) fs.mkdirSync(failedDir, { recursive: true });
       if (fs.existsSync(processingPath)) {
         try { fs.renameSync(processingPath, path.join(failedDir, file)); } catch (e) {

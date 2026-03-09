@@ -27,7 +27,8 @@ class QueueManager {
     this.syncFromDisk();
 
     // Reconciliación periódica cada 5 segundos
-    setInterval(() => this.syncFromDisk(), 5000);
+    // .unref() allows the Node process to exit even if this timer is still active
+    setInterval(() => this.syncFromDisk(), 5000).unref();
   }
 
   // Sincronizar estado en memoria con archivos en disco
