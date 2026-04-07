@@ -184,43 +184,50 @@ function eliminarFuente(clienteId) {
  * @returns {string}           - texto con \n pixel-accurate
  */
 function wrapTextPixelAware(clienteId, texto, fontSize, maxWidthPx) {
-  const fontInfo = obtenerInfoFuente(clienteId);
-  if (!fontInfo) return texto; // sin fuente → devolver tal cual
+  try {
+    const fontInfo = obtenerInfoFuente(clienteId);
+    if (!fontInfo) return texto;
 
-  const font = opentype.loadSync(fontInfo.fontPath);
+    const font = opentype.loadSync(fontInfo.fontPath);
 
-  const inputLines = texto.split("\n");
-  const outputLines = [];
-
-  for (const line of inputLines) {
-    if (!line.trim()) {
-      outputLines.push(line);
-      continue;
+    // Mide el ancho en pixels de un string usando getBoundingBox —
+    // el mismo método que usa textoASvg, garantizado disponible.
+    function measureWidth(str) {
+      if (!str) return 0;
+      const bounds = font.getPath(str, 0, 0, fontSize).getBoundingBox();
+      return bounds.x2 - bounds.x1;
     }
 
-    const words = line.split(" ");
-    let current = "";
-    let currentWidth = 0;
+    const inputLines = texto.split("\n");
+    const outputLines = [];
 
-    for (const word of words) {
-      const wordWidth = font.getAdvanceWidth(word, fontSize);
-      const spaceWidth = current ? font.getAdvanceWidth(" ", fontSize) : 0;
-
-      if (current && currentWidth + spaceWidth + wordWidth > maxWidthPx) {
-        // La línea actual llena — empezar nueva
-        outputLines.push(current);
-        current = word;
-        currentWidth = wordWidth;
-      } else {
-        current = current ? `${current} ${word}` : word;
-        currentWidth += spaceWidth + wordWidth;
+    for (const line of inputLines) {
+      if (!line.trim()) {
+        outputLines.push(line);
+        continue;
       }
+
+      const words = line.split(" ");
+      let current = "";
+
+      for (const word of words) {
+        const proposed = current ? `${current} ${word}` : word;
+        if (current && measureWidth(proposed) > maxWidthPx) {
+          outputLines.push(current);
+          current = word;
+        } else {
+          current = proposed;
+        }
+      }
+
+      if (current) outputLines.push(current);
     }
 
-    if (current) outputLines.push(current);
+    return outputLines.join("\n");
+  } catch (err) {
+    console.error(`[wrapTextPixelAware] Error al wrappear texto, se usa el original: ${err.message}`);
+    return texto;
   }
-
-  return outputLines.join("\n");
 }
 
 module.exports = {
