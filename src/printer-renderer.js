@@ -60,6 +60,7 @@ async function printText(printer, text, style = {}, config, useFontTicket) {
         // Incluir sha de la fuente en el cache key: si cambia la fuente,
         // cambia la clave y se ignoran los PNG viejos automáticamente.
         fontVersion: config.assets?.font?.sha256 || "default",
+        maxWidthPx: config.paperWidthPx,
       });
       await imprimirImagenBuffer(printer, buffer);
     } catch (err) {
@@ -147,11 +148,16 @@ async function renderSection(printer, section, config, useFontTicket) {
         // Render text as PNG with custom font, then composite with icon
         try {
           const sharp = require("sharp");
+          const gap = 8;
+          const textMaxWidthPx = config.paperWidthPx
+            ? config.paperWidthPx - iconSize - gap
+            : undefined;
           const textBuffer = await textRenderer.renderizarTexto(config.clienteId, section.text, {
             fontSize:    section.style?.fontSize || 24,
             centerText:  false,
             bold:        section.style?.bold || false,
             fontVersion: config.assets?.font?.sha256 || "default",
+            maxWidthPx:  textMaxWidthPx,
           });
 
           if (textBuffer && iconBuffer) {
@@ -282,6 +288,15 @@ function validarDatosParaPlantilla(data) {
   return { valid: true, missingFields: [] };
 }
 
+// Ancho de papel térmico en pixels a 203 DPI (estándar Epson/Star).
+// Se usa para el wrap pixel-aware en fuentes personalizadas.
+// 80mm (48 cols) → 576px total, ~556px descontando márgenes laterales.
+// 58mm (32 cols) → 384px total, ~364px descontando márgenes laterales.
+const PAPER_WIDTH_PX = {
+  48: 556,
+  32: 364,
+};
+
 /**
  * Punto de entrada principal.
  * Itera las sections del template y las renderiza en orden.
@@ -306,6 +321,8 @@ async function imprimirConPlantilla(config, data, template) {
   if (!printer) return false;
 
   const useFontTicket = config.useFontTicket === true;
+  const paperWidthPx = PAPER_WIDTH_PX[printerDest.width] ?? PAPER_WIDTH_PX[48];
+  const enrichedConfig = { ...config, paperWidthPx };
 
   if (useFontTicket) {
     try {
@@ -322,7 +339,7 @@ async function imprimirConPlantilla(config, data, template) {
 
   for (const section of template.sections) {
     try {
-      await renderSection(printer, section, config, useFontTicket);
+      await renderSection(printer, section, enrichedConfig, useFontTicket);
     } catch (err) {
       console.error(`❌ Error en sección "${section.type}":`, err.message);
       // Sigue con el resto aunque una sección falle

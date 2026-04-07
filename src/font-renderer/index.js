@@ -172,10 +172,62 @@ function eliminarFuente(clienteId) {
   return false;
 }
 
+/**
+ * Wrappea texto en pixel-space usando la fuente real del cliente.
+ * Respeta \n existentes (enviados por el frontend) y agrega nuevos
+ * saltos cuando una línea superaría maxWidthPx.
+ *
+ * @param {string} clienteId
+ * @param {string} texto       - puede contener \n previos
+ * @param {number} fontSize
+ * @param {number} maxWidthPx  - ancho máximo en pixels (papel - márgenes)
+ * @returns {string}           - texto con \n pixel-accurate
+ */
+function wrapTextPixelAware(clienteId, texto, fontSize, maxWidthPx) {
+  const fontInfo = obtenerInfoFuente(clienteId);
+  if (!fontInfo) return texto; // sin fuente → devolver tal cual
+
+  const font = opentype.loadSync(fontInfo.fontPath);
+
+  const inputLines = texto.split("\n");
+  const outputLines = [];
+
+  for (const line of inputLines) {
+    if (!line.trim()) {
+      outputLines.push(line);
+      continue;
+    }
+
+    const words = line.split(" ");
+    let current = "";
+    let currentWidth = 0;
+
+    for (const word of words) {
+      const wordWidth = font.getAdvanceWidth(word, fontSize);
+      const spaceWidth = current ? font.getAdvanceWidth(" ", fontSize) : 0;
+
+      if (current && currentWidth + spaceWidth + wordWidth > maxWidthPx) {
+        // La línea actual llena — empezar nueva
+        outputLines.push(current);
+        current = word;
+        currentWidth = wordWidth;
+      } else {
+        current = current ? `${current} ${word}` : word;
+        currentWidth += spaceWidth + wordWidth;
+      }
+    }
+
+    if (current) outputLines.push(current);
+  }
+
+  return outputLines.join("\n");
+}
+
 module.exports = {
   registrarFuente,
   textoASvg,
   textoAImagen,
   obtenerInfoFuente,
   eliminarFuente,
+  wrapTextPixelAware,
 };

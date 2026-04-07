@@ -1,5 +1,6 @@
 // src/font-renderer/text-renderer.js
 const fontRenderer = require("./index");
+const { wrapTextPixelAware } = fontRenderer;
 const fontCache = require("./cache");
 
 
@@ -19,7 +20,12 @@ async function renderizarTexto(clienteId, texto, options = {}) {
   }
 
   // fontVersion identifica el directorio de caché — se extrae antes de hashear
-  const { fontVersion = "default", ...renderOptions } = options;
+  const { fontVersion = "default", maxWidthPx, ...renderOptions } = options;
+
+  // Wrap pixel-accurate antes de renderizar si viene el ancho del papel
+  if (maxWidthPx) {
+    texto = wrapTextPixelAware(clienteId, texto, renderOptions.fontSize || 28, maxWidthPx);
+  }
   const cacheKey = fontCache.generarClaveCaching(clienteId, texto, renderOptions);
 
   if (fontCache.existeEnCache(fontVersion, cacheKey)) {
