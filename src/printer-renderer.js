@@ -117,9 +117,10 @@ async function renderSection(printer, section, config, useFontTicket) {
     // textRenderer, then composited with the icon using sharp.
     // When useFontTicket is false: falls back to separate image + text sections.
     case "icon-text": {
-      const iconPosition = section.iconPosition || "left";
-      const iconSize     = section.iconSize || 40;
-      const align        = section.align || section.style?.align || "center";
+      const iconPosition    = section.iconPosition || "left";
+      const iconSize        = section.iconSize || 40;
+      const align           = section.align || section.style?.align || "center";
+      const iconVerticalAlign = section.iconVerticalAlign || "middle";
 
       // Decode icon buffer
       let iconBuffer = null;
@@ -166,7 +167,7 @@ async function renderSection(printer, section, config, useFontTicket) {
             const totalWidth  = iconSize + gap + textMeta.width;
             const totalHeight = Math.max(iconSize, textMeta.height);
             const textTop  = Math.floor((totalHeight - textMeta.height) / 2);
-            const iconTop  = Math.floor((totalHeight - iconSize) / 2);
+            const iconTop  = iconVerticalAlign === "top" ? 0 : Math.floor((totalHeight - iconSize) / 2);
 
             const compositeOps = iconPosition === "left"
               ? [
