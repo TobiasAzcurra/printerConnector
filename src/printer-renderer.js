@@ -100,6 +100,11 @@ async function renderSection(printer, section, config, useFontTicket) {
         let rawBuffer;
         if (section.src.startsWith("data:")) {
           rawBuffer = Buffer.from(section.src.split(",")[1], "base64");
+        } else if (section.src.startsWith("http")) {
+          // URL fallback: fetch from Node.js (no CORS restrictions)
+          const res = await fetch(section.src);
+          if (!res.ok) throw new Error(`HTTP ${res.status} al descargar imagen`);
+          rawBuffer = Buffer.from(await res.arrayBuffer());
         } else {
           rawBuffer = Buffer.from(section.src, "base64");
         }
