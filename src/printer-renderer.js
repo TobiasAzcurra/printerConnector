@@ -97,16 +97,20 @@ async function renderSection(printer, section, config, useFontTicket) {
     case "image": {
       if (!section.src) break;
       try {
-        let buffer;
+        let rawBuffer;
         if (section.src.startsWith("data:")) {
-          buffer = Buffer.from(section.src.split(",")[1], "base64");
+          rawBuffer = Buffer.from(section.src.split(",")[1], "base64");
         } else {
-          buffer = Buffer.from(section.src, "base64");
+          rawBuffer = Buffer.from(section.src, "base64");
         }
-        printer.alignCenter();
-        await imprimirImagenBuffer(printer, buffer);
+        // node-thermal-printer only supports PNG (uses pngjs internally).
+        // Convert via sharp so JPEG and other formats work too.
+        const sharp = require("sharp");
+        const pngBuffer = await sharp(rawBuffer).png().toBuffer();
+        applyAlign(printer, section.align ?? "center");
+        await imprimirImagenBuffer(printer, pngBuffer);
       } catch (err) {
-        console.error(`❌ Error al imprimir imagen: ${err.message}`);
+        console.error(`❌ Error al imprimir imagen: ${err.message}`, err.stack);
       }
       break;
     }
