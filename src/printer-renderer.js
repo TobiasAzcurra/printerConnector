@@ -118,7 +118,8 @@ async function renderSection(printer, section, config, useFontTicket) {
         await imprimirImagenBuffer(printer, pngBuffer);
         console.log(`📷 [image] OK — enviado a impresora`);
       } catch (err) {
-        console.error(`❌ Error al imprimir imagen: ${err.message}`, err.stack);
+        const preview = rawBuffer ? rawBuffer.slice(0, 8).toString("hex") : "sin buffer";
+        console.error(`❌ Error al imprimir imagen: ${err.message} — primeros bytes: ${preview}`);
       }
       break;
     }
