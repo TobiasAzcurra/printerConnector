@@ -95,7 +95,9 @@ async function renderSection(printer, section, config, useFontTicket) {
     // ── image ─────────────────────────────────────────────────────────────
     // El frontend manda la imagen como base64 (data URI o raw base64 string).
     case "image": {
-      if (!section.src) break;
+      if (!section.src) { console.warn("📷 [image] src vacío — saltando"); break; }
+      const srcType = section.src.startsWith("data:") ? "data-URI" : section.src.startsWith("http") ? "URL" : "raw-base64";
+      console.log(`📷 [image] procesando — tipo: ${srcType}`);
       try {
         let rawBuffer;
         if (section.src.startsWith("data:")) {
@@ -114,6 +116,7 @@ async function renderSection(printer, section, config, useFontTicket) {
         const pngBuffer = await sharp(rawBuffer).png().toBuffer();
         applyAlign(printer, section.align ?? "center");
         await imprimirImagenBuffer(printer, pngBuffer);
+        console.log(`📷 [image] OK — enviado a impresora`);
       } catch (err) {
         console.error(`❌ Error al imprimir imagen: ${err.message}`, err.stack);
       }
@@ -348,6 +351,7 @@ async function imprimirConPlantilla(config, data, template) {
   }
 
   for (const section of template.sections) {
+    console.log(`  → sección: ${section.type}${section.type === "image" ? ` (src: ${section.src ? section.src.substring(0, 40) : "VACÍO"})` : ""}`);
     try {
       await renderSection(printer, section, enrichedConfig, useFontTicket);
     } catch (err) {
