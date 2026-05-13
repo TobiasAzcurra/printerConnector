@@ -19,8 +19,9 @@ const processingDir   = process.env.TEST_PROCESSING_DIR ?? path.join(ROOT_DIR, "
 const confirmDir      = path.join(ROOT_DIR, "pending-confirmations");
 
 const API_BASE            = process.env.API_BASE            ?? "http://localhost:4040";
-const MAX_RETRIES         = parseInt(process.env.TEST_MAX_RETRIES      ?? "5",    10);
-const BASE_RETRY_DELAY_MS = parseInt(process.env.TEST_RETRY_DELAY_MS   ?? "5000", 10);
+const MAX_RETRIES         = parseInt(process.env.TEST_MAX_RETRIES      ?? "10",   10);
+const BASE_RETRY_DELAY_MS = parseInt(process.env.TEST_RETRY_DELAY_MS   ?? "10000", 10);
+const MAX_RETRY_DELAY_MS  = parseInt(process.env.TEST_MAX_RETRY_DELAY_MS ?? String(5 * 60 * 1000), 10);
 
 let config = {};
 
@@ -355,7 +356,7 @@ async function processJobForPrinter(file, datos, printerKey) {
     retryStates[file].count += 1;
 
     if (retryStates[file].count <= MAX_RETRIES) {
-      const delayMs = BASE_RETRY_DELAY_MS * Math.pow(2, retryStates[file].count - 1);
+      const delayMs = Math.min(BASE_RETRY_DELAY_MS * Math.pow(2, retryStates[file].count - 1), MAX_RETRY_DELAY_MS);
       retryStates[file].nextRetryTime = Date.now() + delayMs;
       logQueue.warn(`Reintento ${retryStates[file].count}/${MAX_RETRIES} en ${delayMs / 1000}s — ${jobId}`);
       if (fs.existsSync(processingPath)) fs.renameSync(processingPath, jobPath);
